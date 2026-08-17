@@ -15,3 +15,6 @@ tokens.json
 # Scratch
 tmp/
 .cache/
+
+# Machine-specific Claude Code settings (permissions, local paths)
+.claude/settings.local.json
