@@ -153,6 +153,106 @@ describe('end/relist guard', () => {
   })
 })
 
+describe('raw eBay publish endpoints', () => {
+  const publishCalls = [
+    'curl -X POST https://HOST/sell/inventory/v1/offer/8527/publish -H "Authorization: Bearer $T"',
+    'curl -X POST https://HOST/sell/inventory/v1/offer/publish_by_inventory_item_group -d "{\\"inventoryItemGroupKey\\":\\"WW-MOOS-40\\"}"',
+  ]
+
+  for (const template of publishCalls) {
+    it(`blocks against production: ${template.slice(0, 60)}…`, () => {
+      const r = runGuard(template.replace('HOST', 'api.ebay.com'), { dotenv: SANDBOX })
+      expect(r.status).toBe(2)
+      expect(r.stderr).toMatch(/eBay publish endpoint/)
+    })
+
+    it(`allows the same call against the sandbox host`, () => {
+      const r = runGuard(template.replace('HOST', 'api.sandbox.ebay.com'), { dotenv: SANDBOX })
+      expect(r.status).toBe(0)
+    })
+  }
+
+  it('blocks a publish path whose host is a variable — fail closed on the money side', () => {
+    const r = runGuard('curl -X POST "$EBAY_API/sell/inventory/v1/offer/8527/publish"', {
+      dotenv: SANDBOX,
+    })
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/without a recognisable sandbox host/)
+  })
+
+  it('leaves the free Inventory API neighbours alone, production host included', () => {
+    for (const cmd of [
+      // createOffer — drafting, no fee (research §5: fees land at publishOffer)
+      'curl -X POST https://api.ebay.com/sell/inventory/v1/offer -d @offer.json',
+      // full-replace item and group PUTs — drafting
+      'curl -X PUT https://api.ebay.com/sell/inventory/v1/inventory_item/WW-MOOS-40-SW -d @item.json',
+      'curl -X PUT https://api.ebay.com/sell/inventory/v1/inventory_item_group/WW-MOOS-40 -d @group.json',
+      // reads
+      'curl https://api.ebay.com/sell/inventory/v1/offer/8527',
+      'curl "https://api.ebay.com/commerce/taxonomy/v1/category_tree/77/get_item_aspects_for_category?category_id=261636"',
+    ]) {
+      expect(runGuard(cmd, { dotenv: SANDBOX }).status, cmd).toBe(0)
+    }
+  })
+})
+
+describe('raw Etsy activation', () => {
+  it('blocks state=active regardless of EBAY_ENV — Etsy has no sandbox', () => {
+    for (const cmd of [
+      'curl -X PATCH https://api.etsy.com/v3/application/shops/1/listings/2 --data-urlencode "state=active"',
+      'curl -X PATCH https://openapi.etsy.com/v3/application/shops/1/listings/2 -d \'{"state":"active"}\'',
+    ]) {
+      const r = runGuard(cmd, { dotenv: SANDBOX })
+      expect(r.status, cmd).toBe(2)
+      expect(r.stderr).toMatch(/billable moment/)
+    }
+  })
+
+  it('leaves the free Etsy neighbours alone', () => {
+    for (const cmd of [
+      // createDraftListing — free (research §9: the fee lands on activation)
+      'curl -X POST https://api.etsy.com/v3/application/shops/1/listings --data-urlencode "title=Moss Pole" --data-urlencode "quantity=4"',
+      // content update on a draft — free
+      'curl -X PATCH https://api.etsy.com/v3/application/shops/1/listings/2 --data-urlencode "title=Better Title"',
+      // reads
+      'curl "https://api.etsy.com/v3/application/listings/active?keywords=moss+pole"',
+      // deactivation is not activation
+      'curl -X PATCH https://api.etsy.com/v3/application/shops/1/listings/2 --data-urlencode "state=inactive"',
+    ]) {
+      expect(runGuard(cmd, { dotenv: SANDBOX }).status, cmd).toBe(0)
+    }
+  })
+
+  it('ignores state=active without any Etsy context', () => {
+    expect(runGuard('systemctl set-property foo state=active', { dotenv: SANDBOX }).status).toBe(0)
+  })
+})
+
+describe('lookalikes in strings and comments', () => {
+  // The guard reads command strings, not intent — it cannot parse shell
+  // semantics to tell a request from a quoted mention. The line it draws:
+  // the PATH form (`/offer/{id}/publish`) and the literal endpoint name
+  // (`publish_by_inventory_item_group`) block wherever they appear, even
+  // inside a commit message. That is the right side of the error for a money
+  // guard: the cheap failure is rephrasing a message, the expensive one is a
+  // listing fee. Looser mentions without the path form pass.
+
+  it('blocks the endpoint path form even inside a quoted string — fail closed, by design', () => {
+    const r = runGuard(
+      'git commit -m "fix: retry /offer/123/publish call against api.ebay.com"',
+      { dotenv: SANDBOX },
+    )
+    expect(r.status).toBe(2)
+  })
+
+  it('passes a colloquial mention that lacks the path form', () => {
+    const r = runGuard('git commit -m "guard: block offer publish calls on ebay"', {
+      dotenv: SANDBOX,
+    })
+    expect(r.status).toBe(0)
+  })
+})
+
 describe('robustness', () => {
   it('fails open on broken stdin', () => {
     expect(runGuard('', { rawStdin: '{ this is not json' }).status).toBe(0)
