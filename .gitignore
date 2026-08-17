@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local runtime state (tokens live in ~/.3d-print-lister, but guard anyway)
+*.sqlite
+*.sqlite-journal
+tokens.json
+
+# Scratch
+tmp/
+.cache/

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lister-ui",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "src/cli.ts", "ui", "--no-open", "-p", "4322"],
+      "port": 4322,
+      "autoPort": false
+    }
+  ]
+}

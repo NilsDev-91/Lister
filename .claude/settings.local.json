@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__9405f136-6146-4024-907d-80609dc12a59__learn_etsy_api",
+      "PowerShell(py -0p 2>$null; Write-Output \"---\"; Get-ChildItem \"$env:LOCALAPPDATA\\\\Programs\\\\Python\" -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name; Write-Output \"---\"; Test-Path \"C:\\\\Users\\\\Nilsg\\\\projects\\\\hyperliquid-bot\")"
+    ]
+  }
+}

@@ -1,0 +1,268 @@
+# 3d-print-lister
+
+Turn a MakerWorld model page into eBay and Etsy listings, with Claude writing the copy.
+
+```bash
+lister create --url https://makerworld.com/en/models/1029890-flexi-octopus \
+              --from-html ./saved-page.html \
+              --price 24.90 --material PETG --colour Petrol \
+              --dimensions 220x60x30 --weight 120
+
+lister publish mw-1029890-a1b2c3 --marketplace etsy --draft
+```
+
+---
+
+## What it does
+
+1. Reads a MakerWorld model page — title, description, images, designer, licence.
+2. **Checks the licence** and decides whether the designer's images and text may be reused.
+3. Asks Claude for marketplace-native copy: German for eBay, English for Etsy.
+4. Validates that copy against each marketplace's rules *before* sending it.
+5. Creates drafts, and publishes only when you say so.
+
+Nothing goes live without an explicit confirmation. Both marketplaces charge real
+money at the final step, so `create` never publishes and `publish` always asks.
+
+---
+
+## Setup
+
+```bash
+npm install
+cp .env.example .env    # then fill it in
+npm run build
+```
+
+You need three sets of credentials. `.env.example` lists them all.
+
+### Anthropic
+
+An API key from <https://console.anthropic.com>. The tool uses `claude-opus-5`.
+
+### Etsy
+
+Register at <https://www.etsy.com/developers/register>. For listing to your own
+shop a **Seller App** is enough and is approved automatically within minutes.
+
+Two credentials, used in two different places — this is the single most common
+source of 403s:
+
+| Where | Value |
+|---|---|
+| `x-api-key` header, every API call | `keystring:shared_secret` (colon-joined) |
+| `client_id`, the OAuth flow | the bare keystring |
+
+Register `http://localhost:3456/callback` as a redirect URI on the app, then:
+
+```bash
+lister auth etsy
+```
+
+### eBay
+
+Create a keyset at <https://developer.ebay.com/my/keys> — you get separate
+Sandbox and Production keysets, and they are not interchangeable.
+
+**eBay's redirect is a RuName, not a URL.** Create one under your keyset
+("User Tokens" → "Get a Token from eBay via Your Application"). The real HTTPS
+callback URL is configured behind it.
+
+**eBay will not register a `localhost` callback**, so a desktop CLI cannot catch
+the redirect. `lister auth ebay` therefore opens the consent page and asks you to
+paste the URL you land on. The authorization code inside it expires after about
+five minutes, so paste promptly.
+
+```bash
+lister auth ebay
+```
+
+Before publishing, your eBay account also needs:
+
+- **Business policies** — a fulfillment (shipping), payment and return policy for
+  your marketplace. The tool reads these; it will not invent shipping terms or a
+  returns policy for you. Create them in eBay's seller settings.
+- **Marketplace account deletion notifications** — every eBay developer
+  application must either subscribe to these or explicitly opt out. Production
+  keysets get disabled until this is settled.
+
+Start on `EBAY_ENV=sandbox`.
+
+---
+
+## Getting the MakerWorld page
+
+MakerWorld sits behind Cloudflare and refuses non-browser requests. A direct
+fetch returns **403 with a challenge page** — this was verified, and it is the
+normal outcome rather than a bug. `lister create --url …` will try, and tell you
+so when it fails.
+
+The dependable route is to let your browser do the fetching:
+
+1. Open the model page in your browser.
+2. Save it — Ctrl+S, "Webpage, HTML only" is enough.
+3. `lister create --url <the model url> --from-html <the saved file>`
+
+The tool then only parses a local file, so no automated request ever reaches
+MakerWorld. That also sidesteps the automated-access restriction in MakerWorld's
+Terms of Use, which its permissive `robots.txt` does not override.
+
+---
+
+## The licence gate
+
+MakerWorld records a licence per model, and it decides two separate things:
+
+- May you sell prints of this model?
+- May you reuse the designer's renders and description in your listing?
+
+The tool maps MakerWorld's own vocabulary — the values are bare, `BY-NC` rather
+than `CC BY-NC`:
+
+| Licence | Sell prints? | Reuse the designer's media? |
+|---|---|---|
+| `CC0`, `BY`, `BY-SA`, `BY-ND` | yes | yes, with attribution (except CC0) |
+| `BY-NC`, `BY-NC-SA`, `BY-NC-ND` | **no** | **no** |
+| `Standard Digital File License` (and its variants) | **no** | **no** |
+| `MakerWorld Exclusive License` | **no** | **no** |
+| anything unrecognised | treated as **no** | treated as **no** |
+
+A licence that **forbids** the sale (SDFL, the NC variants) is a hard stop:
+`create` refuses, preflight blocks, and `publish` refuses even with
+`--skip-preflight`. An **unrecognised** licence routes to a confirmation
+instead — that is the case where you may know more than the page does. When
+media reuse is blocked, the tool asks for your own photos rather than quietly
+proceeding.
+
+If you hold a commercial licence the page does not reflect — bought separately,
+or because it is your own model — `--i-have-commercial-rights` overrides the
+gate, and still asks for confirmation.
+
+**This is a routing aid, not legal advice.** It reads a field on a web page.
+
+---
+
+## Images
+
+The two marketplaces want images in opposite forms, which is worth knowing before
+you shoot photos:
+
+- **Etsy** takes the actual files. `--image photo.jpg`
+- **eBay** takes public **HTTPS URLs** and fetches them itself. It cannot see a
+  local file. `--image-url https://…/photo.jpg`
+
+If the licence permits reuse, MakerWorld's own CDN URLs satisfy eBay directly and
+the tool downloads them for Etsy. If you use your own photos, they need to be
+hosted somewhere before eBay will accept them.
+
+---
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `lister auth ebay\|etsy` | Connect an account |
+| `lister whoami` | Show what is connected and when tokens expire |
+| `lister create` | Build a draft from a model page |
+| `lister show <id>` | Read the generated copy |
+| `lister list` | All drafts and their status |
+| `lister publish <id>` | Send to the marketplaces |
+| `lister revise <id>` | Push edited copy to listings that are already live |
+| `lister delete <id>` | Remove a local draft |
+
+`publish` takes `--draft` to create the remote draft and stop before anything is
+charged, and `--marketplace ebay|etsy` to do one at a time.
+
+Once a listing is live, edits are pushed with `revise` (or `publish`, which
+notices and does the same): eBay is updated in place so the item ID, watchers
+and sales history survive — never end-and-relist — and Etsy gets its four text
+fields (title, description, tags, materials) rewritten. Price and quantity are
+not revised. Revising costs nothing on either marketplace.
+
+**In the eBay sandbox you must pass `--category-id <id>`.** eBay's category
+suggestion endpoint is unsupported there, and it does not fail — it returns a
+*successful* response full of random boilerplate category names. Trusting it
+would publish under an arbitrary category, so the tool refuses to guess in
+sandbox and asks for the id instead.
+
+---
+
+## Costs
+
+- **Etsy** charges a listing fee (about €0.20) **when a listing is activated**,
+  not when the draft is created. `--draft` is free. Auto-renew is off by default,
+  because each renewal is another fee.
+- **eBay** fees depend on your account and category.
+
+The final publish call is never retried automatically — a retried publish can
+create a duplicate listing, and duplicates cost money.
+
+---
+
+## Development
+
+```bash
+npm test          # 293 tests, no network
+npm run typecheck
+npm run dev -- list
+```
+
+The tests pin the things that fail at publish time rather than at compile time:
+Etsy's undocumented character rules (only one `&` per title; no hyphens in
+materials), MakerWorld's bare licence vocabulary, and the page parser.
+
+`docs/research/` holds the API research this was built from, including the
+verified request shapes for both marketplaces.
+
+---
+
+## EU product safety (GPSR) and VAT
+
+**If you print the item and sell it under your own name, GPSR (EU 2023/988
+Art. 3) makes you the manufacturer.** Because you are established in the EU you
+are also your own responsible economic operator — so eBay wants your name and
+address in `regulatory.manufacturer`, and the `responsiblePersons` array stays
+empty. That array is for manufacturers based *outside* the EU, and the tool
+deliberately never sends it.
+
+Fill in the `SELLER_*` fields in `.env`. eBay requires this block only for
+certain categories, so the tool asks eBay which apply and refuses to publish
+into a category that needs data you have not provided.
+
+Being the manufacturer also carries duties **outside** any API — risk analysis,
+technical documentation, and your name and address on the product or its
+packaging. This tool cannot help with those.
+
+**VAT.** Pass `--vat 19` only if you are a business seller with a VAT ID
+registered at eBay; `vatPercentage` is invoice metadata and the price you send
+stays gross. Under the Kleinunternehmerregelung (§19 UStG) the correct encoding
+is to send no tax block at all, which is what happens when you omit `--vat`.
+There is no field that expresses VAT exemption — and eBay's neighbouring
+`applyTax` flag is a US sales-tax switch, not a VAT one, so the tool never sends
+it. **This is not tax advice.**
+
+---
+
+## Known gaps
+
+- **Etsy has no GPSR API surface at all.** eBay exposes the fields; Etsy does
+  not, so any EU compliance data for an Etsy listing has to be entered in Shop
+  Manager by hand.
+- **Packaging register (LUCID / VerpackG)** is an account setting on both
+  platforms. eBay's `extendedProducerResponsibility` fields look like the right
+  place and are explicitly marked "DO NOT USE" in its own docs, so the tool
+  leaves them alone.
+- **Colour variations, both marketplaces.** One line per colour in the editor
+  (`SKU; Farbe; Preis; Menge`) publishes ONE listing with a colour dropdown —
+  own SKU, price and quantity per colour. On eBay via the inventory item group
+  (sales pooled on a single item ID; per-colour photos supported; not every
+  category allows it — the taxonomy's `aspectEnabledForVariations` decides and
+  the tool checks; a live listing cannot switch shape). On Etsy via the
+  inventory endpoint (custom property "Farbe"; shape may change freely, and
+  the variations ride along on both draft creation and revise).
+- **Custom SKUs.** `--sku` on create, or the SKU field in the editor; empty
+  falls back to the local id. eBay charset: letters, digits, `.` `_` `-`, max
+  50 characters.
+- eBay item specifics come from Claude and are checked against the category's
+  required aspects, but a mismatch surfaces as a publish rejection rather than
+  being auto-corrected.

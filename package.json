@@ -1,0 +1,33 @@
+{
+  "name": "3d-print-lister",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Turn a MakerWorld model page into eBay and Etsy listings, with Claude writing the copy.",
+  "bin": {
+    "lister": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.0",
+    "commander": "^14.0.1",
+    "node-html-parser": "^7.0.1",
+    "open": "^10.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

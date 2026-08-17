@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lister — drei Design-Richtungen</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         background: #10131a; color: #e8eaed; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  .intro h1 { font-size: 1.6rem; margin: 0 0 .4rem; letter-spacing: -.01em; }
+  .intro p { color: #98a2b3; margin: 0 0 2.5rem; max-width: 62ch; }
+  .variant-label { display: flex; align-items: baseline; gap: .75rem; margin: 3.5rem 0 1rem;
+                   padding-bottom: .6rem; border-bottom: 1px solid #262c38; }
+  .variant-label h2 { font-size: 1.15rem; margin: 0; }
+  .variant-label span { color: #98a2b3; font-size: .875rem; }
+  .frame { border-radius: 14px; overflow: hidden; border: 1px solid #262c38; }
+
+  /* ============================================================
+     A — WERKSTATT: warm, dicht, werkzeughaft
+     ============================================================ */
+  .wk { --bg:#1c1917; --panel:#242019; --line:#3a332a; --ink:#f2ede4; --dim:#a89e8d;
+        --accent:#d98032; --ok:#7fb069; --warn:#e0a33e; --bad:#d9614c;
+        background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, sans-serif; }
+  .wk .bar { display:flex; align-items:center; gap:1rem; padding:.85rem 1.25rem;
+             background:var(--panel); border-bottom:1px solid var(--line); }
+  .wk .brand { font-weight:700; letter-spacing:.02em; }
+  .wk .brand em { color:var(--accent); font-style:normal; }
+  .wk .env { margin-left:auto; font-size:.75rem; text-transform:uppercase; letter-spacing:.08em;
+             color:var(--accent); border:1px solid var(--accent); border-radius:99px; padding:.15rem .6rem; }
+  .wk .body { display:grid; grid-template-columns: 1.55fr 1fr; gap:1.5rem; padding:1.5rem; }
+  .wk h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--dim);
+           margin:0 0 .7rem; font-weight:600; }
+  .wk .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:1.1rem; margin-bottom:1.1rem; }
+  .wk label { display:block; font-size:.78rem; color:var(--dim); margin-bottom:.3rem; }
+  .wk .field { width:100%; background:#1a1714; border:1px solid var(--line); border-radius:5px;
+               color:var(--ink); padding:.55rem .7rem; font:inherit; font-size:.9rem; }
+  .wk .counter { float:right; font-variant-numeric:tabular-nums; font-size:.75rem; }
+  .wk .counter.tight { color:var(--warn); }
+  .wk .tags { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.55rem; }
+  .wk .tag { background:#332c22; border:1px solid var(--line); border-radius:4px;
+             padding:.15rem .45rem; font-size:.78rem; color:#dcd2c2; }
+  .wk .imgs { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; }
+  .wk .img { aspect-ratio:1; border-radius:5px; border:1px solid var(--line);
+             background:linear-gradient(135deg,#3a332a,#2a251e); display:grid; place-items:center;
+             color:var(--dim); font-size:.7rem; position:relative; }
+  .wk .img.primary { border-color:var(--accent); }
+  .wk .img .n { position:absolute; top:3px; left:5px; font-size:.65rem; color:var(--accent); font-weight:700; }
+  .wk .check { display:flex; gap:.55rem; padding:.4rem 0; font-size:.85rem; align-items:flex-start; }
+  .wk .check .dot { flex:none; width:1.05rem; text-align:center; font-weight:700; }
+  .wk .ok .dot{color:var(--ok)} .wk .warn .dot{color:var(--warn)} .wk .bad .dot{color:var(--bad)}
+  .wk .check small { display:block; color:var(--dim); font-size:.78rem; }
+  .wk .btn { background:var(--accent); color:#1c1917; border:0; border-radius:5px; font-weight:650;
+             padding:.6rem 1.1rem; font-size:.9rem; cursor:pointer; }
+  .wk .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500; }
+  .wk .actions { display:flex; gap:.6rem; align-items:center; margin-top:.4rem; }
+  .wk .note { font-size:.78rem; color:var(--dim); }
+
+  /* ============================================================
+     B — KONTOR: hell, ruhig, viel Weißraum
+     ============================================================ */
+  .kt { --bg:#f7f8fa; --panel:#fff; --line:#e3e6ec; --ink:#1a1d23; --dim:#6b7280;
+        --accent:#2f5fd0; --ok:#1a7f4b; --warn:#a16207; --bad:#b42318;
+        background:var(--bg); color:var(--ink); }
+  .kt .bar { display:flex; align-items:center; gap:1rem; padding:1rem 1.5rem; background:var(--panel);
+             border-bottom:1px solid var(--line); }
+  .kt .brand { font-weight:640; letter-spacing:-.01em; }
+  .kt .env { margin-left:auto; font-size:.75rem; background:#eef2fb; color:var(--accent);
+             border-radius:5px; padding:.2rem .55rem; font-weight:600; }
+  .kt .body { display:grid; grid-template-columns:1.55fr 1fr; gap:1.75rem; padding:1.75rem; }
+  .kt h3 { font-size:.9rem; margin:0 0 .85rem; font-weight:640; }
+  .kt .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+              padding:1.25rem; margin-bottom:1.25rem; }
+  .kt label { display:block; font-size:.8rem; color:var(--dim); margin-bottom:.35rem; font-weight:500; }
+  .kt .field { width:100%; background:#fff; border:1px solid #d3d8e0; border-radius:7px;
+               color:var(--ink); padding:.6rem .75rem; font:inherit; font-size:.9rem; }
+  .kt .counter { float:right; font-variant-numeric:tabular-nums; font-size:.75rem; color:var(--dim); }
+  .kt .counter.tight { color:var(--warn); font-weight:600; }
+  .kt .tags { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.55rem; }
+  .kt .tag { background:#f1f3f7; border-radius:99px; padding:.2rem .6rem; font-size:.78rem; color:#414855; }
+  .kt .imgs { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; }
+  .kt .img { aspect-ratio:1; border-radius:8px; border:1px solid var(--line); background:#eef0f4;
+             display:grid; place-items:center; color:#9aa2b1; font-size:.7rem; position:relative; }
+  .kt .img.primary { border:2px solid var(--accent); }
+  .kt .img .n { position:absolute; top:4px; left:6px; font-size:.65rem; color:var(--accent); font-weight:700; }
+  .kt .check { display:flex; gap:.6rem; padding:.45rem 0; font-size:.875rem; align-items:flex-start; }
+  .kt .check .dot { flex:none; width:1.05rem; text-align:center; font-weight:700; }
+  .kt .ok .dot{color:var(--ok)} .kt .warn .dot{color:var(--warn)} .kt .bad .dot{color:var(--bad)}
+  .kt .check small { display:block; color:var(--dim); font-size:.78rem; }
+  .kt .btn { background:var(--accent); color:#fff; border:0; border-radius:7px; font-weight:600;
+             padding:.62rem 1.15rem; font-size:.9rem; cursor:pointer; }
+  .kt .btn.ghost { background:#fff; color:var(--ink); border:1px solid #d3d8e0; font-weight:500; }
+  .kt .actions { display:flex; gap:.6rem; align-items:center; margin-top:.4rem; }
+  .kt .note { font-size:.78rem; color:var(--dim); }
+
+  /* ============================================================
+     C — KONSOLE: dunkel, monospace, sehr dicht
+     ============================================================ */
+  .ks { --bg:#0b0e14; --panel:#111620; --line:#1e2534; --ink:#c9d1d9; --dim:#6e7a8a;
+        --accent:#4dd4ac; --ok:#4dd4ac; --warn:#e3b341; --bad:#f85149;
+        background:var(--bg); color:var(--ink);
+        font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace; font-size:13.5px; }
+  .ks .bar { display:flex; align-items:center; gap:.9rem; padding:.7rem 1.1rem;
+             border-bottom:1px solid var(--line); }
+  .ks .brand { color:var(--accent); font-weight:600; }
+  .ks .env { margin-left:auto; font-size:.72rem; color:var(--dim); }
+  .ks .body { display:grid; grid-template-columns:1.55fr 1fr; gap:1.2rem; padding:1.2rem; }
+  .ks h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin:0 0 .6rem; }
+  .ks .card { border:1px solid var(--line); border-radius:6px; padding:.9rem; margin-bottom:.9rem; background:var(--panel); }
+  .ks label { display:block; font-size:.72rem; color:var(--dim); margin-bottom:.25rem; }
+  .ks .field { width:100%; background:#0b0e14; border:1px solid var(--line); border-radius:4px;
+               color:var(--ink); padding:.45rem .6rem; font:inherit; font-size:.82rem; }
+  .ks .counter { float:right; font-size:.72rem; color:var(--dim); }
+  .ks .counter.tight { color:var(--warn); }
+  .ks .tags { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.5rem; }
+  .ks .tag { border:1px solid var(--line); border-radius:3px; padding:.1rem .4rem; font-size:.75rem; color:#8b97a8; }
+  .ks .imgs { display:grid; grid-template-columns:repeat(4,1fr); gap:.45rem; }
+  .ks .img { aspect-ratio:1; border:1px solid var(--line); border-radius:4px; background:#0f141c;
+             display:grid; place-items:center; color:var(--dim); font-size:.68rem; position:relative; }
+  .ks .img.primary { border-color:var(--accent); }
+  .ks .img .n { position:absolute; top:3px; left:5px; font-size:.62rem; color:var(--accent); }
+  .ks .check { display:flex; gap:.5rem; padding:.3rem 0; font-size:.8rem; align-items:flex-start; }
+  .ks .check .dot { flex:none; width:1rem; }
+  .ks .ok .dot{color:var(--ok)} .ks .warn .dot{color:var(--warn)} .ks .bad .dot{color:var(--bad)}
+  .ks .check small { display:block; color:var(--dim); font-size:.74rem; }
+  .ks .btn { background:var(--accent); color:#06231b; border:0; border-radius:4px; font-weight:700;
+             padding:.5rem 1rem; font-size:.8rem; cursor:pointer; font-family:inherit; }
+  .ks .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:400; }
+  .ks .actions { display:flex; gap:.5rem; align-items:center; margin-top:.3rem; }
+  .ks .note { font-size:.74rem; color:var(--dim); }
+
+  @media (max-width: 800px) {
+    .wk .body, .kt .body, .ks .body { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="intro">
+    <h1>Drei Richtungen für die lister-Oberfläche</h1>
+    <p>Dieselbe Ansicht — der Inserats-Editor mit deinem Dartshalter — in drei Gestaltungen.
+       Es geht nur um Anmutung und Dichte; Funktionsumfang ist überall gleich.
+       Such eine aus, dann baue ich sie aus.</p>
+  </div>
+
+  <!-- ============================ A ============================ -->
+  <div class="variant-label">
+    <h2>A · Werkstatt</h2>
+    <span>warm, dicht, werkzeughaft — sieht aus wie ein Gerät, nicht wie eine Website</span>
+  </div>
+  <div class="frame wk">
+    <div class="bar">
+      <div class="brand">list<em>er</em></div>
+      <div class="note">Dartshalter - schlank · OMMO</div>
+      <div class="env">Sandbox</div>
+    </div>
+    <div class="body">
+      <div>
+        <div class="card">
+          <h3>eBay · Deutsch</h3>
+          <label>Titel <span class="counter tight">79 / 80</span></label>
+          <input class="field" value="Dartpfeilhalter Wandhalterung 3D-Druck PLA Schwarz Dart Halter slim Dartzubehör">
+          <div style="height:.75rem"></div>
+          <label>Merkmale</label>
+          <div class="tags">
+            <span class="tag">Marke: Markenlos</span><span class="tag">Farbe: Schwarz</span>
+            <span class="tag">Material: PLA Kunststoff</span><span class="tag">Produktart: Dartpfeilhalter</span>
+            <span class="tag">Befestigung: Wandmontage</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Etsy · Englisch</h3>
+          <label>Titel <span class="counter">102 / 140</span></label>
+          <input class="field" value="Slim Dart Holder Wall Mount, 3D Printed Darts Rack in Black PLA">
+          <div style="height:.75rem"></div>
+          <label>Tags <span class="counter">13 / 13</span></label>
+          <div class="tags">
+            <span class="tag">dart holder</span><span class="tag">3d printed dart rack</span>
+            <span class="tag">dart wall mount</span><span class="tag">darts storage</span>
+            <span class="tag">game room decor</span><span class="tag">+8</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Bilder</h3>
+          <div class="imgs">
+            <div class="img primary"><span class="n">1</span>eigenes Foto</div>
+            <div class="img"><span class="n">2</span>eigenes Foto</div>
+            <div class="img"><span class="n">3</span>eigenes Foto</div>
+            <div class="img" style="border-style:dashed">+ ablegen</div>
+          </div>
+          <div class="actions">
+            <button class="btn ghost">Zu eBay hochladen</button>
+            <span class="note">3 lokal · 0 als HTTPS-URL</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Preflight</h3>
+          <div class="check ok"><span class="dot">✓</span><div>Business Policies vorhanden</div></div>
+          <div class="check ok"><span class="dot">✓</span><div>Pflichtmerkmal Marke gesetzt</div></div>
+          <div class="check warn"><span class="dot">!</span><div>Titel am Limit<small>79/80 — kein Spielraum</small></div></div>
+          <div class="check bad"><span class="dot">✗</span><div>eBay hat keine Bilder<small>Braucht HTTPS-URLs</small></div></div>
+        </div>
+        <div class="card">
+          <h3>Veröffentlichen</h3>
+          <div class="actions" style="flex-direction:column; align-items:stretch">
+            <button class="btn" disabled style="opacity:.4; cursor:not-allowed">Live schalten</button>
+            <span class="note">Gesperrt: 1 Blocker offen</span>
+            <button class="btn ghost">Nur Entwurf anlegen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ B ============================ -->
+  <div class="variant-label">
+    <h2>B · Kontor</h2>
+    <span>hell, ruhig, viel Weißraum — vertraute Admin-Anmutung, gut bei langen Sitzungen</span>
+  </div>
+  <div class="frame kt">
+    <div class="bar">
+      <div class="brand">lister</div>
+      <div class="note" style="color:#6b7280">Dartshalter - schlank · OMMO</div>
+      <div class="env">Sandbox</div>
+    </div>
+    <div class="body">
+      <div>
+        <div class="card">
+          <h3>eBay · Deutsch</h3>
+          <label>Titel <span class="counter tight">79 / 80</span></label>
+          <input class="field" value="Dartpfeilhalter Wandhalterung 3D-Druck PLA Schwarz Dart Halter slim Dartzubehör">
+          <div style="height:.9rem"></div>
+          <label>Merkmale</label>
+          <div class="tags">
+            <span class="tag">Marke: Markenlos</span><span class="tag">Farbe: Schwarz</span>
+            <span class="tag">Material: PLA Kunststoff</span><span class="tag">Produktart: Dartpfeilhalter</span>
+            <span class="tag">Befestigung: Wandmontage</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Etsy · Englisch</h3>
+          <label>Titel <span class="counter">102 / 140</span></label>
+          <input class="field" value="Slim Dart Holder Wall Mount, 3D Printed Darts Rack in Black PLA">
+          <div style="height:.9rem"></div>
+          <label>Tags <span class="counter">13 / 13</span></label>
+          <div class="tags">
+            <span class="tag">dart holder</span><span class="tag">3d printed dart rack</span>
+            <span class="tag">dart wall mount</span><span class="tag">darts storage</span>
+            <span class="tag">game room decor</span><span class="tag">+8</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Bilder</h3>
+          <div class="imgs">
+            <div class="img primary"><span class="n">1</span>eigenes Foto</div>
+            <div class="img"><span class="n">2</span>eigenes Foto</div>
+            <div class="img"><span class="n">3</span>eigenes Foto</div>
+            <div class="img" style="border-style:dashed">+ ablegen</div>
+          </div>
+          <div class="actions">
+            <button class="btn ghost">Zu eBay hochladen</button>
+            <span class="note">3 lokal · 0 als HTTPS-URL</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Preflight</h3>
+          <div class="check ok"><span class="dot">✓</span><div>Business Policies vorhanden</div></div>
+          <div class="check ok"><span class="dot">✓</span><div>Pflichtmerkmal Marke gesetzt</div></div>
+          <div class="check warn"><span class="dot">!</span><div>Titel am Limit<small>79/80 — kein Spielraum</small></div></div>
+          <div class="check bad"><span class="dot">✗</span><div>eBay hat keine Bilder<small>Braucht HTTPS-URLs</small></div></div>
+        </div>
+        <div class="card">
+          <h3>Veröffentlichen</h3>
+          <div class="actions" style="flex-direction:column; align-items:stretch">
+            <button class="btn" disabled style="opacity:.4; cursor:not-allowed">Live schalten</button>
+            <span class="note">Gesperrt: 1 Blocker offen</span>
+            <button class="btn ghost">Nur Entwurf anlegen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ C ============================ -->
+  <div class="variant-label">
+    <h2>C · Konsole</h2>
+    <span>dunkel, Monospace, sehr dicht — alles im Blick, kein Scrollen, nah am Terminal</span>
+  </div>
+  <div class="frame ks">
+    <div class="bar">
+      <div class="brand">lister</div>
+      <div class="note">mw-1069737-683476 · Dartshalter - schlank</div>
+      <div class="env">EBAY_DE · sandbox</div>
+    </div>
+    <div class="body">
+      <div>
+        <div class="card">
+          <h3>ebay / de</h3>
+          <label>title <span class="counter tight">79/80</span></label>
+          <input class="field" value="Dartpfeilhalter Wandhalterung 3D-Druck PLA Schwarz Dart Halter slim Dartzubehör">
+          <div style="height:.6rem"></div>
+          <label>aspects</label>
+          <div class="tags">
+            <span class="tag">Marke=Markenlos</span><span class="tag">Farbe=Schwarz</span>
+            <span class="tag">Material=PLA Kunststoff</span><span class="tag">Produktart=Dartpfeilhalter</span>
+            <span class="tag">Befestigung=Wandmontage</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>etsy / en</h3>
+          <label>title <span class="counter">102/140</span></label>
+          <input class="field" value="Slim Dart Holder Wall Mount, 3D Printed Darts Rack in Black PLA">
+          <div style="height:.6rem"></div>
+          <label>tags <span class="counter">13/13</span></label>
+          <div class="tags">
+            <span class="tag">dart holder</span><span class="tag">3d printed dart rack</span>
+            <span class="tag">dart wall mount</span><span class="tag">darts storage</span>
+            <span class="tag">game room decor</span><span class="tag">+8</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>images</h3>
+          <div class="imgs">
+            <div class="img primary"><span class="n">1</span>own.jpg</div>
+            <div class="img"><span class="n">2</span>own.jpg</div>
+            <div class="img"><span class="n">3</span>own.jpg</div>
+            <div class="img" style="border-style:dashed">drop</div>
+          </div>
+          <div class="actions">
+            <button class="btn ghost">upload → ebay</button>
+            <span class="note">3 local · 0 hosted</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h3>preflight</h3>
+          <div class="check ok"><span class="dot">✓</span><div>business policies</div></div>
+          <div class="check ok"><span class="dot">✓</span><div>aspect Marke</div></div>
+          <div class="check warn"><span class="dot">!</span><div>title at limit<small>79/80</small></div></div>
+          <div class="check bad"><span class="dot">✗</span><div>no ebay images<small>needs https urls</small></div></div>
+        </div>
+        <div class="card">
+          <h3>publish</h3>
+          <div class="actions" style="flex-direction:column; align-items:stretch">
+            <button class="btn" disabled style="opacity:.35; cursor:not-allowed">go live</button>
+            <span class="note">blocked · 1 blocker</span>
+            <button class="btn ghost">draft only</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
