@@ -1,4 +1,5 @@
 import type { ListingRecord, Marketplace } from '../types.js'
+import { config } from '../config.js'
 import { UserError } from '../util/log.js'
 import { terminalIo, type Io } from '../util/io.js'
 import { lastRateLimit } from '../marketplaces/etsy/client.js'
@@ -6,6 +7,7 @@ import { searchEtsy } from './etsy-source.js'
 import { searchEbay } from './ebay-source.js'
 import { mine } from './mine.js'
 import { followUpQueries, seedQueries } from './seed.js'
+import { cacheKey, readSearchCache, writeSearchCache, TTL_HOURS } from './research-cache.js'
 import type { KeywordEvidence, SearchResult } from './types.js'
 
 /**
@@ -36,6 +38,8 @@ export interface ResearchArgs {
    * audience, so narrowing to one destination would mine the wrong market.
    */
   buyerCountry?: string | undefined
+  /** Bypass the research cache and query the marketplaces live. */
+  fresh?: boolean
   /** Injected so a test can pin the clock; `daysListed` depends on it. */
   now?: Date
 }
@@ -57,14 +61,18 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
 
   const notes: string[] = []
   const results: SearchResult[] = []
+  const stats = { cached: 0, live: 0 }
 
   io.step(`Researching ${marketplace} keywords (${seeds.length} seed searches)`)
 
   for (const query of seeds) {
-    const result = await runQuery({ query, marketplace, perQuery, now, notes, args })
+    const result = await runQuery({ query, marketplace, perQuery, now, notes, stats, args })
     if (result) {
-      results.push(result)
-      io.detail(`"${query}" — ${result.listings.length} listings, ${formatCount(result.totalMatches)} competing`)
+      results.push(result.result)
+      const from = result.cached ? ' (cache)' : ''
+      io.detail(
+        `"${query}" — ${result.result.listings.length} listings, ${formatCount(result.result.totalMatches)} competing${from}`,
+      )
     } else {
       io.warn(`"${query}" — search failed, skipped`)
     }
@@ -93,10 +101,11 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
     if (followUps.length) {
       io.step(`Measuring competition for ${followUps.length} candidate phrase(s)`)
       for (const query of followUps) {
-        const result = await runQuery({ query, marketplace, perQuery, now, notes, args })
+        const result = await runQuery({ query, marketplace, perQuery, now, notes, stats, args })
         if (result) {
-          results.push(result)
-          io.detail(`"${query}" — ${formatCount(result.totalMatches)} competing`)
+          results.push(result.result)
+          const from = result.cached ? ' (cache)' : ''
+          io.detail(`"${query}" — ${formatCount(result.result.totalMatches)} competing${from}`)
         } else {
           io.warn(`"${query}" — search failed, competition unmeasured`)
         }
@@ -110,6 +119,20 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
       })
     } else {
       notes.push('No follow-up searches ran; competition figures cover the seed queries only.')
+    }
+  }
+
+  // Appended to the mined evidence, not to `notes`: `mine` has already copied
+  // that array into the result by now, and a note pushed after the copy would
+  // silently vanish. A cached figure presented as live would be a lie.
+  if (stats.cached > 0) {
+    evidence = {
+      ...evidence,
+      notes: [
+        ...evidence.notes,
+        `${stats.cached} of ${stats.cached + stats.live} searches came from the local research cache ` +
+          `(entries live ${TTL_HOURS} h); run with --fresh for live figures.`,
+      ],
     }
   }
 
@@ -131,6 +154,7 @@ interface QueryArgs {
   perQuery: number
   now: Date
   notes: string[]
+  stats: { cached: number; live: number }
   args: ResearchArgs
 }
 
@@ -139,19 +163,51 @@ interface QueryArgs {
  *
  * A single bad query — a phrase the marketplace rejects, a transient 500 — must
  * not discard the queries that already succeeded. It is recorded and skipped.
+ *
+ * The cache sits here rather than inside the sources because this is the one
+ * spot both marketplaces and both rounds pass through — and because a cached
+ * answer must be indistinguishable in shape from a live one, which re-parsing
+ * through `SearchResultSchema` on read guarantees.
  */
-async function runQuery(q: QueryArgs): Promise<SearchResult | null> {
+async function runQuery(q: QueryArgs): Promise<{ result: SearchResult; cached: boolean } | null> {
+  const key = cacheKey({
+    marketplace: q.marketplace,
+    query: q.query,
+    limit: q.perQuery,
+    buyerCountry: q.marketplace === 'etsy' ? q.args.buyerCountry : undefined,
+    marketplaceId: q.marketplace === 'ebay' ? config.ebay.marketplaceId : undefined,
+  })
+
+  if (!q.args.fresh) {
+    const hit = readSearchCache(key, q.now)
+    if (hit) {
+      q.stats.cached++
+      // Replayed, not dropped: a truncated-sample note recorded by the live
+      // run still applies to the cached copy of that sample.
+      q.notes.push(...hit.notes)
+      return { result: hit.result, cached: true }
+    }
+  }
+
+  // The sources push sample-limitation notes into `q.notes` as they run; the
+  // slice of new entries belongs to this query and is cached with it.
+  const notesBefore = q.notes.length
   try {
+    let result: SearchResult
     if (q.marketplace === 'etsy') {
-      return await searchEtsy({
+      result = await searchEtsy({
         query: q.query,
         limit: q.perQuery,
         buyerCountry: q.args.buyerCountry,
         nowMs: q.now.getTime(),
         notes: q.notes,
       })
+    } else {
+      result = await searchEbay({ query: q.query, limit: q.perQuery })
     }
-    return await searchEbay({ query: q.query, limit: q.perQuery })
+    q.stats.live++
+    writeSearchCache(key, result, q.now, q.notes.slice(notesBefore))
+    return { result, cached: false }
   } catch (error) {
     q.notes.push(`Search for "${q.query}" failed: ${error instanceof Error ? error.message : String(error)}`)
     return null

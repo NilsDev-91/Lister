@@ -197,6 +197,7 @@ program
   )
   .option('--rewrite', 'Also draft new copy against the research, stored for review', false)
   .option('--reuse-research', 'Draft from the research already stored, without searching again', false)
+  .option('--fresh', 'Ignore cached search results and query the marketplaces live', false)
   .option(
     '--no-credit',
     'Leave out the designer credit line when rewriting. No marketplace requires it; some licences do.',
@@ -213,6 +214,7 @@ program
       marketplaces: opts.reuseResearch ? [] : (opts.marketplace as Marketplace[]),
       rewrite: opts.rewrite,
       credit: opts.credit,
+      fresh: opts.fresh,
     })
   })
 

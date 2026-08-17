@@ -37,6 +37,8 @@ export interface KeywordsOptions {
   rewrite: boolean
   /** Keep the designer credit line, as `create` does. */
   credit: boolean
+  /** Bypass the research cache and query the marketplaces live. */
+  fresh?: boolean
   io?: Io
 }
 
@@ -61,6 +63,7 @@ export async function keywordsCommand(options: KeywordsOptions): Promise<Listing
         io,
         perQuery: settings.researchSampleSize,
         buyerCountry: settings.etsyBuyerCountry || undefined,
+        fresh: options.fresh,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

@@ -9,7 +9,6 @@ import { mkdirSync } from 'node:fs'
 export const DATA_DIR = process.env.LISTER_DATA_DIR ?? join(homedir(), '.3d-print-lister')
 
 export const TOKENS_FILE = join(DATA_DIR, 'tokens.json')
-export const DB_FILE = join(DATA_DIR, 'listings.sqlite')
 export const IMAGE_CACHE_DIR = join(DATA_DIR, 'images')
 
 /** Creates the data directory tree. Safe to call repeatedly. */

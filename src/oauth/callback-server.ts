@@ -86,13 +86,27 @@ export async function captureViaLoopback(args: {
   const port = Number(url.port || 80)
   const path = url.pathname
 
+  // 15 minutes, not 5: the consent page may sit behind a login (password
+  // manager, 2FA), and a run on 2026-08-16 timed out exactly that way. The
+  // authorization code itself only lives seconds once granted, so a longer
+  // wait costs nothing in security — the window being bounded at all is what
+  // matters, and the process is interactive besides.
+  const timeoutMs = args.timeoutMs ?? 15 * 60_000
+
   let server: Server | undefined
 
   try {
     const result = await new Promise<AuthCodeResult>((resolve, reject) => {
       const timeout = setTimeout(
-        () => reject(new UserError('Timed out waiting for the browser callback.')),
-        args.timeoutMs ?? 5 * 60_000,
+        () =>
+          reject(
+            new UserError(
+              `No browser callback arrived within ${timeoutMs / 60_000} minutes.`,
+              'Run the auth command again and finish the consent in the freshly opened tab — ' +
+                'an old tab belongs to the previous attempt and will be rejected.',
+            ),
+          ),
+        timeoutMs,
       )
 
       server = createServer((req, res) => {
@@ -153,6 +167,7 @@ export async function captureViaLoopback(args: {
       server.listen(port, '127.0.0.1', () => {
         log.step('Opening your browser to authorise…')
         log.detail(`If it does not open, visit:\n  ${args.authorizeUrl}`)
+        log.detail(`Waiting up to ${timeoutMs / 60_000} minutes for you to grant access.`)
         void open(args.authorizeUrl).catch(() => {
           log.warn('Could not launch a browser automatically — open the URL above by hand.')
         })
