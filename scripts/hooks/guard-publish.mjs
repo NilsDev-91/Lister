@@ -1,8 +1,12 @@
-// PreToolUse hook (matcher: Bash). Blocks the two commands that cost real
-// money or destroy a live listing's history; lets everything else through.
+// PreToolUse hook (matcher: Bash). Blocks the commands that cost real money
+// or destroy a live listing's history; lets everything else through.
 //
 // Exit 2 + stderr = Claude Code blocks the tool call and shows the reason.
 // Exit 0 silently = normal permission flow continues.
+//
+// Structure: RULES is an ordered list of functions taking the command string
+// and returning a block reason or null. The first reason wins. Everything a
+// rule needs beyond the command (environment, .env) it resolves itself.
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -19,6 +23,17 @@ if (!command) process.exit(0)
 
 const cwd = event?.cwd ?? process.cwd()
 
+const RULES = [endRelistRule, cliPublishRule]
+
+for (const rule of RULES) {
+  const reason = rule(command)
+  if (reason) {
+    process.stderr.write(reason)
+    process.exit(2)
+  }
+}
+process.exit(0)
+
 /**
  * eBay end+relist destroys the item ID, watchers, sale history and search
  * standing — this repo updates live listings in place (`lister revise`).
@@ -27,15 +42,16 @@ const cwd = event?.cwd ?? process.cwd()
  * No trailing \b: the Trading API spells these `EndItemRequest`,
  * `RelistItemResponse` etc., and the suffix must still match.
  */
-const endRelist =
-  /\b(EndItem|EndFixedPriceItem|RelistItem|RelistFixedPriceItem)/i.test(command) ||
-  (/\bwithdraw\b/i.test(command) && /\boffer\b/i.test(command))
-if (endRelist) {
-  block(
+function endRelistRule(cmd) {
+  const matches =
+    /\b(EndItem|EndFixedPriceItem|RelistItem|RelistFixedPriceItem)/i.test(cmd) ||
+    (/\bwithdraw\b/i.test(cmd) && /\boffer\b/i.test(cmd))
+  if (!matches) return null
+  return (
     'Blocked: this looks like an eBay end/relist or offer-withdraw call. ' +
-      'Live listings are updated in place with `lister revise` — ending and relisting ' +
-      'loses the item ID, watchers and sale history. If a listing really must come down, ' +
-      'the user does that by hand.',
+    'Live listings are updated in place with `lister revise` — ending and relisting ' +
+    'loses the item ID, watchers and sale history. If a listing really must come down, ' +
+    'the user does that by hand.'
   )
 }
 
@@ -52,42 +68,36 @@ if (endRelist) {
  * README's `npm run dev -- …` (plus Node 22's `node --run dev`) — so that
  * e.g. `npm publish` in some other context is not caught.
  */
-const isListerPublish =
-  /(?:\blister\b|\bcli\.(?:ts|js)\b|\bnpm\s+run\s+dev\b|\bnode\s+--run\s+dev\b)[^&|;]*?\bpublish\b/.test(
-    command,
-  )
-const hasDraftFlag = /--draft\b/.test(command)
+function cliPublishRule(cmd) {
+  const isListerPublish =
+    /(?:\blister\b|\bcli\.(?:ts|js)\b|\bnpm\s+run\s+dev\b|\bnode\s+--run\s+dev\b)[^&|;]*?\bpublish\b/.test(
+      cmd,
+    )
+  if (!isListerPublish || /--draft\b/.test(cmd)) return null
 
-if (isListerPublish && !hasDraftFlag) {
-  const marketplaces = marketplacesInvolved(command)
+  const marketplaces = marketplacesInvolved(cmd)
   // An empty flag (`-M` with no value) is a malformed call, not an eBay-only
   // one — it stays blocked rather than slipping through the sandbox exemption.
   const ebayOnly =
     marketplaces !== null && marketplaces.length > 0 && marketplaces.every((m) => m === 'ebay')
 
   if (!ebayOnly) {
-    block(
+    return (
       'Blocked: `lister publish` without --draft on a call that involves Etsy ' +
-        '(explicitly, or implicitly because no -M/--marketplace flag limits it to eBay). ' +
-        'Etsy has no sandbox — activation always charges a real listing fee and is never ' +
-        'automatically repeatable. Use --draft, restrict to `-M ebay` in the sandbox, or ' +
-        'leave the publish click to the user.',
+      '(explicitly, or implicitly because no -M/--marketplace flag limits it to eBay). ' +
+      'Etsy has no sandbox — activation always charges a real listing fee and is never ' +
+      'automatically repeatable. Use --draft, restrict to `-M ebay` in the sandbox, or ' +
+      'leave the publish click to the user.'
     )
   }
   if (effectiveEbayEnv() !== 'sandbox') {
-    block(
+    return (
       'Blocked: `lister publish` without --draft while EBAY_ENV is not "sandbox". ' +
-        'Publishing creates a live listing with real fees and is never automatically ' +
-        'repeatable. Use --draft, or leave the publish click to the user.',
+      'Publishing creates a live listing with real fees and is never automatically ' +
+      'repeatable. Use --draft, or leave the publish click to the user.'
     )
   }
-}
-
-process.exit(0)
-
-function block(reason) {
-  process.stderr.write(reason)
-  process.exit(2)
+  return null
 }
 
 /**
