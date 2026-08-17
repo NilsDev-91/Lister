@@ -1,6 +1,8 @@
 # 3d-print-lister — Architektur & Übergabe
 
-> Stand: 2026-08-16, Ende der großen Bugfix- und Feature-Sitzung. Diese Datei
+> Stand: 2026-08-17, nach der Optimierungs-Sitzung (Recherche-Cache, ToS-Prüfung,
+> Review-Fixes, **Git-Repo initialisiert** — Historie ab Baseline `5013a0c`).
+> Diese Datei
 > ist für eine **frische Sitzung ohne Vorwissen** geschrieben. Sie enthält vor
 > allem die Erkenntnisse, die teuer waren — Dinge, die in keiner Dokumentation
 > stehen oder dort **falsch** stehen. Die Abschnitte unter „Erkenntnisse" sind
@@ -49,8 +51,10 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Etsy-Farbvarianten | gebaut (`updateListingVariations`, Custom-Property 513, an Draft UND Revise angehängt), Body-Builder getestet — **gegen die echte API ungeprüft** (kein OAuth) |
 | Eigene SKUs | fertig: `--sku` bei create, Feld im Editor, je Variante in der Tabelle; Charset `A-Za-z0-9._-`, ≤50 |
 | Varianten-Editor | fertig: Textzeilen `SKU; Farbe; Preis; Menge` (Semikolon wegen Dezimalkomma), Fehler pro Zeile, Roundtrip live geprüft |
+| Recherche-Cache | fertig, **live E2E geprüft** (17.08.): Suchergebnisse 24 h auf Platte, `--fresh` umgeht ihn; Wiederholungslauf = 0 Quota, Kennzeichnung „(cache)" + Notiz in der Evidenz |
+| Etsy-API-ToS | gelesen und dokumentiert (`docs/research/etsy-api-terms.md`): Recherche ist **Grauzone**, Cache + Aggregat-only sind die Verteidigung |
 
-328 Tests, alle grün. `npm test && npm run build` läuft sauber.
+347 Tests, alle grün. `npm test && npm run build` läuft sauber.
 
 > `db.concurrency.test.ts` „is unsafe without the lock" ist ein
 > **Timing**-Negativtest: Er startet zwei echte Prozesse ohne Sperre und
@@ -159,6 +163,69 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-17 — Optimierungs-Sitzung (Cache, ToS, Review-Fixes)
+
+- **Der Recherche-Cache sitzt in `runQuery` (`seo/research.ts`)** — der eine
+  Punkt, durch den beide Marktplätze und beide Runden laufen. Einträge werden
+  beim Lesen gegen `SearchResultSchema` re-validiert (Lehre vom aspect-cache),
+  der Key trägt Query, Limit, buyerCountry und die eBay-Marktplatz-ID (der
+  Browse-Header ist das Einzige, was dort den Markt wählt — ein Key ohne ihn
+  servierte deutsche Zahlen für einen anderen Markt). Suchnotizen (z. B.
+  „Detail-Fallback lief") werden mitgecacht und beim Treffer wiederholt, sonst
+  überschreibt der Wiederholungslauf die Evidenz mit einer Version, in der die
+  verkürzte Stichprobe wie eine vollständige aussieht.
+- **Statischer Import friert `DATA_DIR` ein, bevor `beforeAll` greift.** Die
+  erste Version von `research-cache.test.ts` importierte `isFresh`/`cacheKey`
+  statisch — ESM hoisted das vor jeden Testcode, `LISTER_DATA_DIR` kam zu spät,
+  und die Disk-Tests schrieben ein **fabriziertes „dart holder"-Ergebnis in den
+  ECHTEN Nutzer-Cache**, wo eine Live-Recherche es 24 h lang als Marktdaten
+  serviert hätte. `db.corrupt.test.ts` dokumentiert genau diese Falle. Regel:
+  Module, die `DATA_DIR` lesen, in Tests **ausschließlich dynamisch**
+  importieren, nach dem Setzen der Env-Variable. (Multi-Agent-Review hat es
+  gefunden, inkl. der vergifteten Datei; sie ist gelöscht.)
+- **`licenseFromText` erfand Lizenzen aus Seiten-Bytes.** `#cc0000` in einem
+  Stylesheet matchte `CC0`, der Identifier `accByUser` matchte `CC-BY`, und ein
+  nacktes „Attribution" (jeder Footer-Link) galt als Lizenzname — ein Upgrade
+  auf „kommerziell erlaubt" am Verkaufsgate vorbei. Jetzt: Scripts/Styles
+  werden vor dem Scan entfernt, alle Muster sind wortbegrenzt, „Attribution"
+  zählt nur als Compound oder mit Version. Drei Tests pinnen es.
+- **Wiederverwendete Etsy-Drafts bekamen weder Text noch Varianten.** Der
+  Reuse-Zweig sprang direkt zur Aktivierung: ein nach `--draft` bearbeiteter
+  Text ging nie zu Etsy, und Varianten aus dem Editor wurden still zum
+  Einzel-Inserat degradiert — exakt der Fall, für den `variants` authored ist.
+  Jetzt läuft `updateListingContent` + der Varianten-PUT (Full-Replace,
+  idempotent) auch auf dem Reuse-Pfad. Bilder bewusst weiterhin nur beim
+  frischen Draft (Upload hängt an, ersetzt nicht).
+- **`expired` ist der NORMALE Endzustand jedes Etsy-Inserats dieses Tools**
+  (`should_auto_renew=false`) — und fiel vorher in „neuen Draft anlegen"
+  durch: Duplikat, verwaiste Historie, zweite Gebühr. Jetzt harter Stopp mit
+  Verweis auf Shop Manager für alles außer `draft`/`active`.
+- **Ein `group:<key>`-remoteId ist keine Offer-ID.** Varianten-`--draft`,
+  dann Varianten im Editor geleert (der Shape-Lock schützt nur LIVE) →
+  der Einzel-Pfad rief `updateOffer('group:…')`, eBay 404, Datensatz für
+  immer verkeilt. Jetzt wird das Präfix erkannt und die Gruppe aufgegeben
+  (Drafts kosten nichts); `createOffer` recovert ohnehin per SKU.
+- **Etsy-API-ToS** (`docs/research/etsy-api-terms.md`): Verwaltung eigener
+  Inserate ist der Kernzweck; die Keyword-Recherche berührt zwei Klauseln
+  (Sammeln „für Analysen" nur mit schriftlicher Genehmigung; Mindestmengen-
+  Gebot). Verteidigbar, solange sie anlassbezogen, aggregat-only und gecacht
+  bleibt — der Cache ist damit auch ein Compliance-Feature, TTL nicht
+  „sicherheitshalber" hochdrehen. Anzeige-Regel: dargestellte Artikelinhalte
+  dürfen max. 6 h alt sein — wir zeigen keine, das muss so bleiben.
+- **Subagenten-Limits:** 5 von 13 Review-Agenten fielen dem Sitzungslimit zum
+  Opfer (Reset 23:20 Berlin beobachtet). Die Dimension `views-roundtrips`
+  (views.ts-Escaping, Roundtrips, images.ts, create.ts) wurde deshalb **nicht
+  erneut** tief reviewt — bei Gelegenheit nachholen.
+- Kleinbefunde, offen und bewusst nur dokumentiert (unverifiziert): Bild-
+  Abgleich bei wiederverwendetem Etsy-Draft (Teil-Upload wird nicht erkannt);
+  SKU-Änderung nach Draft/Publish desynct Offer↔Item (eBay-Offer-SKU ist
+  unveränderlich); verlorene `publishOffer`-Antwort verkeilt ein real
+  gelistetes Einzel-Inserat (Recovery über `getOffer().listing` wäre möglich);
+  Publish-Flash meldet Erfolg, wenn der verweigerte Marktplatz keine Zeile
+  hat (nur per nachgebautem Formular erreichbar); Fortschrittsseite spricht
+  bei Bild-Jobs von „Entwurf erstellt"; `show --remote` refresht das
+  eBay-Token doppelt (zwei parallele Erst-Calls, harmlos).
 
 ## Nachtrag 2026-08-16 — Bugfix-Runde (komplette Codebasis reviewt)
 
@@ -917,7 +984,8 @@ npx tsx src/cli.ts list            # CLI-Übersicht
 npx tsx src/cli.ts show <id> --remote   # gegen eBay gegenprüfen
 npx tsx src/cli.ts preflight <id> --marketplace ebay --category-id 59890
 
-npx tsx src/cli.ts keywords <id> -M etsy            # recherchieren
+npx tsx src/cli.ts keywords <id> -M etsy            # recherchieren (nutzt den 24h-Cache)
+npx tsx src/cli.ts keywords <id> -M etsy --fresh    # Cache umgehen, live suchen
 npx tsx src/cli.ts keywords <id> -M etsy --rewrite  # + Entwurf erzeugen
 npx tsx src/cli.ts keywords <id> --reuse-research --rewrite  # neuer Entwurf,
                                                     #   ohne erneut zu suchen
@@ -954,31 +1022,39 @@ Recherche zu allen APIs: `docs/research/` (8 Dateien, adversarial verifiziert).
 
 1. **Etsy-OAuth verbinden** — der eine Schritt, an dem alles Etsy-Schreibende
    hängt. `npx tsx src/cli.ts auth etsy` öffnet den Browser; der Nutzer muss
-   **Grant access** klicken (5-Minuten-Fenster; ein Versuch am 16.08. lief in
-   den Timeout). Voraussetzung: `http://localhost:3456/callback` als Redirect
-   an der Etsy-App. Danach sofort testbar: `getIdentity`, Versandprofile,
-   Return-Policies (alles read-only) — dann Etsy-Varianten-Draft.
+   **Grant access** klicken. Das Fenster ist seit 17.08. **15 Minuten** (der
+   Versuch am 16.08. lief in den alten 5-Minuten-Timeout), die Fehlermeldung
+   erklärt jetzt den Retry. Voraussetzung: `http://localhost:3456/callback`
+   als Redirect an der Etsy-App. Danach sofort testbar: `getIdentity`,
+   Versandprofile, Return-Policies (alles read-only) — dann Etsy-Varianten-Draft.
 2. **Etsy-Varianten-Drafttest** (kostenlos, Etsy hat keine Sandbox!). Braucht
    zusätzlich ein Inserat mit `ownDesign` — das Gate steht auch im Test, und
-   die Behauptung kann nur der Nutzer machen. Kein aktuelles Inserat qualifiziert.
-3. **Etsys API-Nutzungsbedingungen lesen** (`etsy.com/legal/api`), bevor die
-   Recherche regelmäßig läuft. Ob systematische Auswertung fremder Inserate
-   gedeckt ist, ist **ungeprüft**.
-4. **Recherche-Cache bauen.** Kosten bekannt: ~7 Aufrufe pro Marktplatz und
-   Inserat, 10.000/Tag verfügbar.
-5. **GPSR live prüfen** — `SELLER_*` füllen und einen Publish in einer
+   die Behauptung kann nur der Nutzer machen. Kein aktuelles Inserat
+   qualifiziert. Beim Test auch den neuen Reuse-Pfad prüfen (Text + Varianten
+   auf wiederverwendetem Draft — 17.08. gebaut, nie gegen die echte API
+   gelaufen).
+3. **GPSR live prüfen** — `SELLER_*` füllen und einen Publish in einer
    Kategorie testen, die die Daten verlangt (Längen-Limits werden seit 16.08.
-   beim Laden erzwungen).
-6. **Produktion vorbereiten:** gewerbliches Konto, Impressum,
+   beim Laden erzwungen). Die Einstellungsseite zeigt den Status („nicht
+   gepflegt").
+4. **Produktion vorbereiten:** gewerbliches Konto, Impressum,
    Widerrufsbelehrung, AGB; Production-Keyset + eigener RuName;
    Account-Deletion-Notification. Das Keyset schaltet nebenbei die
    eBay-Keyword-Recherche frei — die hängt nur daran, nicht am RuName.
    Für echte Farbvarianten: Kategorie mit `aspectEnabledForVariations` für
    Farbe wählen (Dart 59890 kann es nicht; Deko-/Figuren-Kategorien meist ja).
-7. **Offener Entwurfstext am Dartshalter:** das Proposal stammt von vor der
-   Rechte-Angabe und enthält noch die SDFL-Zeile — beim Annehmen fängt der
-   Preflight das wieder ein (Zeile löschen oder Proposal verwerfen).
-8. Kein Git-Repo — bei Bedarf `git init` (`.gitignore` liegt bereit).
+5. **Etsy-App-Zweck prüfen/ergänzen** (Entwicklerkonto): muss Inserats-
+   verwaltung UND Keyword-Recherche fürs eigene Inserat nennen — Details und
+   Begründung in `docs/research/etsy-api-terms.md`. Optional developer@etsy.com
+   um schriftliche Bestätigung bitten.
+6. **Review-Dimension `views-roundtrips` nachholen** (fiel dem Subagenten-
+   Limit zum Opfer) und die dokumentierten Kleinbefunde aus dem Nachtrag
+   17.08. bei Gelegenheit abarbeiten.
+
+Erledigt am 17.08.: Recherche-Cache (Punkt 4 alt), ToS-Lektüre (Punkt 3 alt),
+`git init` (Punkt 8 alt; Baseline `5013a0c`). Das offene Dartshalter-Proposal
+(Punkt 7 alt) existiert nicht mehr — `lister proposal` meldet sauber „no
+pending rewrite".
 
 ## Arbeitsweise, die sich bewährt hat
 
