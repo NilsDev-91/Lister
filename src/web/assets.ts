@@ -497,7 +497,11 @@ if (job && job.dataset.state === 'running') {
     if (stop) return;
     try {
       const response = await fetch('/progress/' + encodeURIComponent(job.dataset.job) + '/state');
-      if (response.ok) render(await response.json());
+      // The server answers an unknown job id with 404 *plus* a JSON body whose
+      // state is 'failed' — the registry is in-memory, so a restart forgets
+      // running jobs. Rendering that body ends the poll with an honest message
+      // instead of counting seconds forever against a job nobody is running.
+      if (response.ok || response.status === 404) render(await response.json());
     } catch (error) {
       // A dropped poll is not a failed job — the work runs on the server. Keep
       // trying; the page reload path shows the outcome either way.

@@ -96,7 +96,9 @@ function detectCc(text: string): CcFlags | null {
     return {
       nonCommercial: /\bnon[\s\-_]*commercial\b/i.test(text),
       shareAlike: /\bshare[\s\-_]*alike\b/i.test(text),
-      noDerivatives: /\bno[\s\-_]*deriv(ative|s)?\b/i.test(text),
+      // `NoDerivatives` — the official CC 4.0 plural — must match too; with
+      // `(ative|s)?` alone the trailing "s" of the plural broke the \b.
+      noDerivatives: /\bno[\s\-_]*deriv(?:ative(?:s)?|s)?\b/i.test(text),
     }
   }
 

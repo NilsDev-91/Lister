@@ -186,3 +186,55 @@ describe('isChallenge', () => {
     }
   })
 })
+
+describe('licenseFromText fallback (via parseModelHtml)', () => {
+  const url = 'https://makerworld.com/en/models/1029890-flexi-funny-octopus'
+
+  /** A page whose payload carries NO licence field, so the text fallback runs. */
+  function pageWithoutLicense(head: string, body: string): string {
+    const design = { ...FULL_DESIGN } as Record<string, unknown>
+    delete design['license']
+    const payload = {
+      props: { pageProps: { design } },
+      page: '/models/[designId]',
+      query: { designId: '1029890-flexi-funny-octopus' },
+      buildId: 'gbZP9c8P6nxLmHPHAr2Qv',
+    }
+    return `<!doctype html><html><head>${head}</head><body>
+${body}
+<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(payload)}</script>
+</body></html>`
+  }
+
+  it('does not invent a licence from CSS colours, identifiers or a bare "Attribution"', () => {
+    // '#cc0000' contains CC0, 'accByUser' contains ccBy, and "Attribution" is
+    // any footer link -- none of them may upgrade an unknown licence, because
+    // an invented permissive licence bypasses the sale gate entirely.
+    const model = parseModelHtml(
+      pageWithoutLicense(
+        '<style>.warn { color: #cc0000; }</style><script>var accByUser = 1;</script>',
+        '<div style="background:#cc0000">Attribution</div><p>photo credits and attribution below</p>',
+      ),
+      url,
+    )
+    expect(model.license.commercialUse).toBe('unknown')
+  })
+
+  it('still recognises a visible licence string in the page text', () => {
+    const model = parseModelHtml(
+      pageWithoutLicense('', '<span>This model is licensed CC BY-NC 4.0</span>'),
+      url,
+    )
+    expect(model.license.code).toBe('CC-BY-NC-4.0')
+    expect(model.license.commercialUse).toBe('no')
+  })
+
+  it('recognises the spelled-out compound form', () => {
+    const model = parseModelHtml(
+      pageWithoutLicense('', '<span>Attribution-NonCommercial-NoDerivatives</span>'),
+      url,
+    )
+    expect(model.license.commercialUse).toBe('no')
+    expect(model.license.code).toBe('CC-BY-NC-ND-4.0')
+  })
+})

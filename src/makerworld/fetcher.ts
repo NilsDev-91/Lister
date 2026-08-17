@@ -310,16 +310,36 @@ function fromMetaTags(root: HTMLElement): Extracted {
   }
 }
 
-/** Last resort for the licence: look for a recognisable licence string in the page text. */
+/**
+ * Last resort for the licence: look for a recognisable licence string in the
+ * page text.
+ *
+ * Guarded on three sides, because this fallback can *upgrade* a licence and
+ * thereby bypass the sale gate — a wrong match here is the worst wrong answer
+ * this module can give:
+ *
+ *  - Scripts and styles are stripped first. They carry megabytes of base64 and
+ *    hex colours where the short CC tokens match by accident — a stylesheet's
+ *    `#cc0000` contains `CC0`, a JS identifier `accByUser` contains `ccBy`.
+ *  - Every pattern is word-bounded, so a token inside a longer word never
+ *    counts.
+ *  - A bare "Attribution" is any footer link, not a licence; only the
+ *    compound (`Attribution-NonCommercial…`) or versioned form qualifies.
+ *
+ * If nothing survives these rules the licence stays unknown, which downstream
+ * turns into a confirmation prompt — the safe direction.
+ */
 function licenseFromText(html: string): string | undefined {
+  const visible = html.replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
   const patterns = [
     /Standard Digital File License/i,
-    /CC[\s-]*BY(?:[\s-]*(?:NC|SA|ND))*(?:[\s-]*\d\.\d)?/i,
-    /CC0(?:[\s-]*\d\.\d)?/i,
-    /Attribution(?:[\s-]*(?:NonCommercial|ShareAlike|NoDerivatives))*/i,
+    /\bCC[\s-]*BY(?:[\s-]*(?:NC|SA|ND))*(?:[\s-]*\d\.\d)?\b/i,
+    /\bCC0(?:[\s-]*\d\.\d)?\b/i,
+    /\bAttribution(?:[\s-]*(?:NonCommercial|ShareAlike|NoDerivatives))+\b/i,
+    /\bAttribution[\s-]*\d\.\d\b/i,
   ]
   for (const pattern of patterns) {
-    const match = pattern.exec(html)
+    const match = pattern.exec(visible)
     if (match) return match[0]
   }
   return undefined

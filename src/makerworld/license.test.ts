@@ -181,3 +181,10 @@ describe('requiresAttribution', () => {
     expect(requiresAttribution(normaliseLicense('unknown'))).toBe(true)
   })
 })
+
+describe('NoDerivatives plural (CC 4.0 official spelling)', () => {
+  it('keeps the ND flag for "Attribution-NoDerivatives"', () => {
+    const info = normaliseLicense('Attribution-NoDerivatives')
+    expect(info.code).toBe('CC-BY-ND-4.0')
+  })
+})

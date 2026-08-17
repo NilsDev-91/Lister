@@ -724,9 +724,18 @@ async function adoptSourceImages(id: string, io: Io): Promise<void> {
   const paths = await downloadImages(listing.id, urls)
   if (!paths.length) throw new UserError('Keines der Bilder ließ sich laden.')
 
+  // The adopt button stays visible after a successful run, and a form can be
+  // replayed. The downloads land on the same filenames, so paths already on
+  // the record mean this adoption already happened — appending them again
+  // would duplicate every photo in the listing and on the next eBay upload.
   const afterDownload = get(id) ?? listing
-  upsert({ ...afterDownload, imagePaths: [...afterDownload.imagePaths, ...paths] })
-  io.ok(`${paths.length} Bild(er) übernommen — Etsy kann damit arbeiten.`)
+  const newPaths = paths.filter((p) => !afterDownload.imagePaths.includes(p))
+  if (!newPaths.length) {
+    io.warn('Diese Bilder sind bereits übernommen — nichts zu tun. Für eBay-URLs: Knopf „Zu eBay hochladen".')
+    return
+  }
+  upsert({ ...afterDownload, imagePaths: [...afterDownload.imagePaths, ...newPaths] })
+  io.ok(`${newPaths.length} Bild(er) übernommen — Etsy kann damit arbeiten.`)
 
   if (!ebayAuth.storedTokens()) {
     io.warn('Nicht mit eBay verbunden — die HTTPS-URLs fehlen noch. Nach `lister auth ebay` der Knopf „Zu eBay hochladen".')
@@ -734,7 +743,7 @@ async function adoptSourceImages(id: string, io: Io): Promise<void> {
   }
 
   io.step('Lade sie auf eBays Bildserver…')
-  const hosted = await uploadPictures(paths)
+  const hosted = await uploadPictures(newPaths)
   const afterUpload = get(id) ?? afterDownload
   upsert({ ...afterUpload, imageUrls: [...afterUpload.imageUrls, ...hosted] })
   io.ok(`${hosted.length} HTTPS-URL(s) eingetragen — eBay kann damit arbeiten.`)

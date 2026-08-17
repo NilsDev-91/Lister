@@ -214,7 +214,17 @@ async function publishToEbay(listing: ListingRecord, options: PublishOptions): P
   // Reuse the offer from an earlier --draft run rather than creating a second
   // one. eBay allows only one offer per sku/marketplace/format, and publishing
   // has to be safe to re-run: a duplicate listing costs the seller fees.
-  const existingOfferId = listing.marketplaces.find((m) => m.marketplace === 'ebay')?.remoteId
+  //
+  // A `group:<key>` id is NOT an offer id — it is left over from a variants
+  // --draft run whose variants were later removed (the shape lock only guards
+  // LIVE listings). Updating it would 404 and wedge the record on every re-run,
+  // so the single path starts over with its own offer; the orphaned draft
+  // group on eBay costs nothing.
+  const storedEbayId = listing.marketplaces.find((m) => m.marketplace === 'ebay')?.remoteId
+  const existingOfferId = storedEbayId?.startsWith('group:') ? undefined : storedEbayId
+  if (storedEbayId && !existingOfferId) {
+    io.detail(`Abandoning draft variation group ${storedEbayId} — this run publishes a single listing.`)
+  }
 
   let offerId: string
   if (existingOfferId) {
@@ -556,10 +566,30 @@ async function publishToEtsy(listing: ListingRecord, options: PublishOptions): P
     return
   }
 
+  // Any other known state — expired, inactive, sold_out — means a real listing
+  // with history exists and can be renewed in Shop Manager. Falling through to
+  // "create a fresh draft" would mint a duplicate, orphan the original with its
+  // views and reviews, and charge a second listing fee. Refusing is the only
+  // move that cannot cost anything. (should_auto_renew is false by design, so
+  // "expired" is the *normal* end state of every listing this tool activates.)
+  if (remote && remote.state !== 'draft') {
+    throw new UserError(
+      `The stored Etsy listing ${storedRemoteId} is in state "${remote.state}" — leaving it untouched.`,
+      'Renew or reactivate it in Shop Manager; publishing here would create a duplicate listing and a second fee.',
+    )
+  }
+
   let draftId: number
   if (existingDraftId !== undefined) {
     draftId = existingDraftId
     io.step(`Etsy: reusing existing draft ${draftId}…`)
+    // The draft may predate edits made since the run that created it. The four
+    // text fields are brought up to date with the same call the active-listing
+    // revise uses — activating a stale draft would publish text the seller no
+    // longer sees anywhere. (Price and quantity stay on the inventory endpoint;
+    // for a variant listing the variations PUT below carries them.)
+    io.step('Etsy: updating draft text…')
+    await etsy.updateListingContent({ shopId, listingId: draftId, copy: listing.copy.etsy })
   } else {
     io.step('Etsy: creating draft listing…')
     const draft = await etsy.createDraftListing({
@@ -573,17 +603,25 @@ async function publishToEtsy(listing: ListingRecord, options: PublishOptions): P
     draftId = draft.listing_id
     updateMarketplace(listing.id, 'etsy', { remoteId: String(draftId), state: 'draft', error: null })
     io.ok(`Etsy draft created: ${draftId} (no fee charged yet)`)
+  }
 
-    // The colour variations replace the single-product inventory the draft was
-    // born with. Etsy renders them as a "Farbe" dropdown with per-colour price,
-    // quantity and SKU — the counterpart of eBay's inventory item group, minus
-    // the shape lock: on Etsy a listing may gain or lose variations freely.
-    if (listing.variants?.length) {
-      io.step(`Etsy: setting ${listing.variants.length} colour variation(s)…`)
-      await etsy.updateListingVariations(draftId, listing.variants)
-      io.detail(listing.variants.map((v) => `${v.colour} — EUR ${v.priceEur.toFixed(2)}, ${v.quantity}x (${v.sku})`).join('\n'))
-    }
+  // The colour variations replace the single-product inventory the draft was
+  // born with. Etsy renders them as a "Farbe" dropdown with per-colour price,
+  // quantity and SKU — the counterpart of eBay's inventory item group, minus
+  // the shape lock: on Etsy a listing may gain or lose variations freely.
+  //
+  // Outside the fresh-draft branch on purpose: the PUT is a full replace and
+  // safe to repeat, and a reused draft that skipped it would activate as a
+  // single-product listing where variants were meant — the exact silent
+  // degradation the authored `variants` field exists to prevent. This also
+  // makes a re-run retry a variations call that failed the first time.
+  if (listing.variants?.length) {
+    io.step(`Etsy: setting ${listing.variants.length} colour variation(s)…`)
+    await etsy.updateListingVariations(draftId, listing.variants)
+    io.detail(listing.variants.map((v) => `${v.colour} — EUR ${v.priceEur.toFixed(2)}, ${v.quantity}x (${v.sku})`).join('\n'))
+  }
 
+  if (existingDraftId === undefined) {
     // Images belong to the draft, so a reused draft already carries them —
     // uploading again would append duplicates, not replace.
     // Etsy accepts up to 20 photos per listing (doubled from 10 in late 2025).
