@@ -731,8 +731,9 @@ function sourceImageReference(listing: ListingRecord): string {
 
   const footer = mayUse
     ? `<p class="note">Du hast angegeben, dass deine Lizenz auch die Bilder des Designers abdeckt.
-         Übernehmen lädt sie herunter, legt sie als Etsy-Dateien ab und schiebt sie — wenn eBay
-         verbunden ist — gleich auf eBays Bildserver.</p>
+         Übernehmen lädt sie herunter und schiebt sie — wenn eBay verbunden ist — gleich auf eBays
+         Bildserver. <strong>Für eBay:</strong> Etsy nimmt grundsätzlich nur deine eigenen Fotos,
+         Downloads gehen dort nie mit hoch.</p>
        <form method="post" action="/listing/${esc(listing.id)}/images/source"
              data-confirm="Die Bilder des Designers ins Inserat übernehmen? Das setzt voraus, dass deine Lizenz sie ausdrücklich einschließt — die übliche Commercial License Membership tut das nicht.">
          <div class="actions">

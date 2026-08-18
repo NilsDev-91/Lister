@@ -25,14 +25,29 @@ const cwd = event?.cwd ?? process.cwd()
 
 const RULES = [endRelistRule, cliPublishRule, ebayRawPublishRule, etsyActivationRule]
 
-for (const rule of RULES) {
-  const reason = rule(command)
-  if (reason) {
-    process.stderr.write(reason)
-    process.exit(2)
+// Rules run per COMMAND SEGMENT, not over the whole line. A `--draft` or
+// `-M ebay` in one segment must not whitewash a second publish behind `&&`
+// (`lister publish A --draft && lister publish B` — B has no draft flag), and
+// conversely an Etsy host in one segment must not condemn an unrelated
+// `state=active` in another.
+for (const segment of segments(command)) {
+  for (const rule of RULES) {
+    const reason = rule(segment)
+    if (reason) {
+      process.stderr.write(reason)
+      process.exit(2)
+    }
   }
 }
 process.exit(0)
+
+/** Splits a shell command line at &&, ||, ;, | and & into its commands. */
+function segments(cmd) {
+  return cmd
+    .split(/(?:\|\||&&|[;|&])+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 /**
  * eBay end+relist destroys the item ID, watchers, sale history and search
@@ -90,7 +105,7 @@ function cliPublishRule(cmd) {
       'leave the publish click to the user.'
     )
   }
-  if (effectiveEbayEnv() !== 'sandbox') {
+  if (!ebayEnvIsSandboxEverywhere()) {
     return (
       'Blocked: `lister publish` without --draft while EBAY_ENV is not "sandbox". ' +
       'Publishing creates a live listing with real fees and is never automatically ' +
@@ -189,20 +204,30 @@ function marketplacesInvolved(cmd) {
 }
 
 /**
- * Resolves EBAY_ENV the same way the CLI will see it: an inline override in
- * the command wins, then the hook's own environment (real env wins over the
- * file in config.ts too), then the project .env, then the config default.
+ * True only when EVERY source that could set EBAY_ENV says sandbox.
+ *
+ * Deliberately stricter than the CLI's own resolution (inline > env > .env >
+ * default): the guard cannot model shell semantics — an `export` in one
+ * segment reaches the next, an inline prefix does not — so any non-sandbox
+ * value anywhere (every inline mention on the line, the hook's environment,
+ * the project .env) makes the call count as production. An inline
+ * `EBAY_ENV=sandbox` can therefore never whitewash a production .env. Sources
+ * checked: all inline mentions, process env, .env; config.ts default is
+ * sandbox.
  */
-function effectiveEbayEnv() {
-  const inline = command.match(/\bEBAY_ENV\s*=\s*["']?(\w+)/)
-  if (inline) return inline[1]
-  if (process.env.EBAY_ENV) return process.env.EBAY_ENV
+function ebayEnvIsSandboxEverywhere() {
+  const candidates = []
+  for (const m of command.matchAll(/\bEBAY_ENV\s*=\s*["']?(\w+)/g)) candidates.push(m[1])
+  if (process.env.EBAY_ENV) candidates.push(process.env.EBAY_ENV)
   const envFile = join(cwd, '.env')
   if (existsSync(envFile)) {
     for (const line of readFileSync(envFile, 'utf8').split(/\r?\n/)) {
       const m = line.match(/^\s*EBAY_ENV\s*=\s*["']?(\w+)/)
-      if (m) return m[1]
+      if (m) {
+        candidates.push(m[1])
+        break
+      }
     }
   }
-  return 'sandbox' // config.ts default
+  return candidates.every((c) => c === 'sandbox') // empty = config default, sandbox
 }

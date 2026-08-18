@@ -568,20 +568,25 @@ async function handleListingAction(
       etsyDesignRiskAccepted,
       marketplaces,
     })
-    redirect(
-      res,
-      flashUrl(
-        backTo,
-        'ok',
-        (overridden
-          ? `Als lizenziert markiert${imagesLicensed ? ', Bilder eingeschlossen' : ''}. ` +
-            'Prüfe, dass der Text keine Lizenz nennt — die auf der Seite ist nicht die, unter der du verkaufst.'
-          : 'Rechte-Angabe zurückgenommen. Veröffentlichen ist wieder gesperrt.') +
-          (riskChecked && !current.ownDesign
-            ? ' Etsy-Eigendesign-Risiko übernommen — protokolliert mit Zeitpunkt und Quelle.'
-            : ''),
-      ),
-    )
+    // The message names what actually CHANGED — a licence claim that was never
+    // set has not been "withdrawn", and saying so next to a freshly accepted
+    // risk read as a contradiction.
+    const said: string[] = []
+    if (overridden) {
+      said.push(
+        `Als lizenziert markiert${imagesLicensed ? ', Bilder eingeschlossen' : ''}. ` +
+          'Prüfe, dass der Text keine Lizenz nennt — die auf der Seite ist nicht die, unter der du verkaufst.',
+      )
+    } else if (current.licenseOverridden) {
+      said.push('Rechte-Angabe zurückgenommen. Veröffentlichen ist wieder gesperrt.')
+    }
+    if (riskChecked && !current.ownDesign && !current.etsyDesignRiskAccepted) {
+      said.push('Etsy-Eigendesign-Risiko übernommen — protokolliert mit Zeitpunkt und Quelle.')
+    } else if (!riskChecked && current.etsyDesignRiskAccepted) {
+      said.push('Etsy-Risiko-Übernahme zurückgenommen — Etsy ist für dieses Inserat wieder gesperrt.')
+    }
+    if (!said.length) said.push('Rechte-Angabe gespeichert, nichts geändert.')
+    redirect(res, flashUrl(backTo, 'ok', said.join(' ')))
     return
   }
 
@@ -778,7 +783,7 @@ async function adoptSourceImages(id: string, io: Io): Promise<void> {
     return
   }
   upsert({ ...afterDownload, imagePaths: [...afterDownload.imagePaths, ...newPaths] })
-  io.ok(`${newPaths.length} Bild(er) übernommen — Etsy kann damit arbeiten.`)
+  io.ok(`${newPaths.length} Bild(er) übernommen — für eBay. Etsy nimmt weiterhin nur deine eigenen Fotos.`)
 
   if (!ebayAuth.storedTokens()) {
     io.warn('Nicht mit eBay verbunden — die HTTPS-URLs fehlen noch. Nach `lister auth ebay` der Knopf „Zu eBay hochladen".')

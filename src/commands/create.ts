@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { fetchModel, readModelFromFile } from '../makerworld/fetcher.js'
 import { gate } from '../makerworld/license.js'
 import { composeListingCopy } from '../ai/composer.js'
-import { stageImages } from '../images.js'
+import { stageImages, looksLikeSourceDownload } from '../images.js'
 import { ListingRecordSchema, ProductInputSchema, type ListingRecord, type ProductInput } from '../types.js'
 import { upsert, findBySourceUrl } from '../store/db.js'
 import { UserError } from '../util/log.js'
@@ -171,7 +171,15 @@ export async function createCommand(options: CreateOptions): Promise<ListingReco
     hostedUrls: options.imageUrl,
   })
 
-  if (!images.paths.length) io.warn('No local image files — Etsy publishing will fail without at least one.')
+  // Etsy counts only the seller's own files; staged source downloads serve eBay.
+  const ownPaths = images.paths.filter((p) => !looksLikeSourceDownload(p))
+  if (!ownPaths.length) {
+    io.warn(
+      images.paths.length
+        ? 'Only source-platform downloads are staged — those never go to Etsy. Add your own photos before an Etsy publish.'
+        : 'No local image files — Etsy publishing will fail without at least one of your own photos.',
+    )
+  }
   if (!images.urls.length) io.warn('No HTTPS image URLs — eBay publishing will fail without at least one.')
 
   // ---- Persist ------------------------------------------------------------

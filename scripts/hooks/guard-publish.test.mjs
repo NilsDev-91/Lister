@@ -253,6 +253,43 @@ describe('lookalikes in strings and comments', () => {
   })
 })
 
+describe('per-segment evaluation — no cross-segment whitewashing', () => {
+  it('a --draft in the first command does not cover a second publish behind &&', () => {
+    const r = runGuard('lister publish A --draft && lister publish B -M ebay', {
+      dotenv: PRODUCTION,
+    })
+    expect(r.status).toBe(2)
+  })
+
+  it('a -M ebay in the first command does not cover a flagless publish behind ;', () => {
+    const r = runGuard('lister publish A -M ebay; lister publish B', { dotenv: SANDBOX })
+    expect(r.status).toBe(2)
+  })
+
+  it('both segments guarded individually still pass when each is safe', () => {
+    const r = runGuard('lister publish A -M ebay --draft && lister publish B -M ebay --draft', {
+      dotenv: PRODUCTION,
+    })
+    expect(r.status).toBe(0)
+  })
+
+  it('an Etsy host in one segment does not condemn an unrelated state=active in another', () => {
+    const r = runGuard('curl https://api.etsy.com/v3/application/listings/1 && systemctl set-property foo state=active', {
+      dotenv: SANDBOX,
+    })
+    expect(r.status).toBe(0)
+  })
+
+  it('an inline EBAY_ENV=sandbox cannot whitewash a production .env', () => {
+    // The guard cannot model which segment an export reaches, so ANY
+    // non-sandbox source makes the line count as production — fail closed.
+    const r = runGuard('EBAY_ENV=sandbox true && lister publish x -M ebay', {
+      dotenv: PRODUCTION,
+    })
+    expect(r.status).toBe(2)
+  })
+})
+
 describe('robustness', () => {
   it('fails open on broken stdin', () => {
     expect(runGuard('', { rawStdin: '{ this is not json' }).status).toBe(0)
