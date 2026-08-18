@@ -30,11 +30,14 @@ export const SettingsSchema = z.object({
   /**
    * Restrict Etsy research to shops delivering to this country.
    *
-   * Empty means no restriction, which is the default: Etsy copy here is English
-   * and aimed at an international audience, so narrowing to one destination
-   * would measure the wrong market.
+   * DE by default: the shop ships within Germany only — packaging-law
+   * (VerpackG) registration is per country — so a shop that does not deliver
+   * here is not a competitor and should not shape the price band or the
+   * keywords. Empty means no restriction, which is what an international
+   * seller would want; it was the default while the Etsy copy was English.
+   * Matches ETSY_LANGUAGE in ai/composer.ts.
    */
-  etsyBuyerCountry: z.string().max(2).default(''),
+  etsyBuyerCountry: z.string().max(2).default('DE'),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 

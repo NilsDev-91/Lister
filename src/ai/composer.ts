@@ -27,6 +27,20 @@ import type { KeywordEvidence, SeoEvidence } from '../seo/types.js'
  */
 
 /**
+ * The language Etsy copy is written in — German, not English.
+ *
+ * The seller ships within Germany only for now: packaging-law (VerpackG)
+ * registration and EPR duties are per country, so an international audience is
+ * not addressable yet, and copy aimed at one would attract exactly the orders
+ * that cannot be fulfilled. eBay was always German; Etsy now matches it.
+ *
+ * Two places have to agree with this and are commented to say so: the research
+ * language in `seo/research.ts` (which decides what the miner searches for) and
+ * the `etsyBuyerCountry` default in `settings.ts`. Change all three together.
+ */
+const ETSY_LANGUAGE = 'German'
+
+/**
  * The schema sent to the API. Deliberately looser than `ListingCopySchema`:
  * describing the limits in prose gets better compliance than relying on
  * constraints the API will silently drop.
@@ -56,9 +70,9 @@ const GenerationSchema = z.object({
     title: z
       .string()
       .describe(
-        'At most 140 characters. Each of % : & + may appear AT MOST ONCE in the whole title. No emoji. English.',
+        `At most 140 characters. Each of % : & + may appear AT MOST ONCE in the whole title. No emoji. ${ETSY_LANGUAGE}.`,
       ),
-    description: z.string().describe('Plain text, no HTML. Line breaks are fine. English.'),
+    description: z.string().describe(`Plain text, no HTML. Line breaks are fine. ${ETSY_LANGUAGE}.`),
     tags: z
       .array(z.string())
       .describe(
@@ -69,21 +83,29 @@ const GenerationSchema = z.object({
       .describe(
         'Up to 13 materials. Letters, digits and SPACES ONLY — no hyphens or punctuation. Write "PLA Plus", never "PLA-Plus".',
       ),
-    taxonomyHint: z.string().describe('A short English category phrase, e.g. "Home Decor" or "Desk Organizer".'),
+    // The hint is matched against Etsy's taxonomy, whose node names are
+    // English — so this one field stays English even though the copy is not.
+    taxonomyHint: z
+      .string()
+      .describe(
+        'A short ENGLISH category phrase, e.g. "Home Decor" or "Desk Organizer" — this is matched against Etsy\'s own category tree, which is in English. English here even though the listing copy is not.',
+      ),
   }),
 })
 
-const SYSTEM_PROMPT = `You write marketplace listings for 3D-printed products, sold by a small independent maker in Germany.
+const SYSTEM_PROMPT = `You write marketplace listings for 3D-printed products, sold by a small independent maker in Germany who ships within Germany only.
 
-You are given a MakerWorld model page and the seller's own facts about the physical item they print from it. Produce listing copy for eBay (German marketplace, German language) and Etsy (English language).
+You are given a MakerWorld model page and the seller's own facts about the physical item they print from it. Produce listing copy for eBay (German marketplace, German language) and Etsy (${ETSY_LANGUAGE} language, German buyers).
 
 What matters:
 
 - Describe the PHYSICAL PRINTED OBJECT the buyer receives, not the digital model and not the MakerWorld page. The buyer is not downloading a file.
 - Be concrete and honest. Use the seller's stated material, dimensions, weight and processing time. Never invent a specification you were not given — no made-up dimensions, print times, or claims about strength, food safety, or weather resistance.
-- eBay copy is German, Etsy copy is English. Do not translate word-for-word; write each natively for its marketplace and audience.
+- BOTH marketplaces are German-language. Write each natively for its marketplace — same language, different voice — never a word-for-word translation of the other.
 - eBay titles are keyword-dense because eBay search is literal. Etsy titles read more naturally and lead with what the thing is.
-- Etsy tags are search phrases buyers actually type, not single generic words. Prefer "3d printed dragon" over "dragon".
+- Etsy tags are search phrases German buyers actually type, not single generic words. Prefer "3d druck drache" over "drache".
+- German compounds run long and Etsy tags are capped at 20 characters. Prefer the two-word form a buyer would type ("moosstab pflanzen") over one compound that busts the limit ("zimmerpflanzenmoosstab"). Count the characters.
+- Write real German on BOTH marketplaces: "für", "Küche", "Größe", "Füße" — NEVER transliterate to "fuer", "Kueche", "Groesse", not even in an eBay title. Umlauts and ß are ordinary letters and are accepted in every field (titles, tags, materials, item specifics); spelling them out reads like a broken import to a German buyer, and both marketplaces match the two forms alike, so it buys nothing.
 - No emoji anywhere. No ALL CAPS. No invented brand names — this is an unbranded handmade item.
 
 When keyword research is supplied, it lists phrases that listings currently ranking for this kind of item actually use, how many of them use it, how crowded the phrase is, and how much traffic it carries. Use it:
@@ -96,7 +118,7 @@ When keyword research is supplied, it lists phrases that listings currently rank
 - Where the research reports eBay item specifics with counts, reuse those exact spellings in \`aspects\`. Buyers filter on those values; a spelling that does not match the filter is invisible to it.
 - Do not stuff. A title reading as a keyword list converts worse, and both marketplaces demote it.
 
-Character rules that will cause a hard API rejection if broken:
+Character rules that will cause a hard API rejection if broken. They restrict PUNCTUATION and symbols, never letters: umlauts and ß count as letters and are always safe.
 - eBay title: 80 characters maximum, hard limit.
 - Etsy title: 140 characters maximum, and each of % : & + may appear at most ONCE in the entire title.
 - Etsy tags: 20 characters maximum each, letters/digits/spaces/hyphens/apostrophes only. No commas.
@@ -287,7 +309,7 @@ const TitleOptionsGenerationSchema = z.object({
   etsy: z
     .array(z.string())
     .describe(
-      'English Etsy titles, at most 140 characters each. Each of % : & + at most ONCE per title. Strongest first.',
+      `${ETSY_LANGUAGE} Etsy titles, at most 140 characters each. Each of % : & + at most ONCE per title. Strongest first.`,
     ),
 })
 
@@ -322,7 +344,7 @@ export async function proposeTitleOptions(args: TitleOptionsArgs): Promise<Title
   const client = new Anthropic({ apiKey: config.anthropic.apiKey })
   const count = args.count ?? 5
 
-  const task = `Write ONLY titles: ${count} options for eBay (German) and ${count} for Etsy (English).
+  const task = `Write ONLY titles: ${count} options for eBay (German) and ${count} for Etsy (${ETSY_LANGUAGE}).
 
 These are in use now and must not be repeated:
 - eBay: ${args.current.ebay}
@@ -389,7 +411,10 @@ export async function composeListingCopy(args: ComposeArgs): Promise<ListingCopy
   const maxAttempts = args.maxAttempts ?? 3
 
   const messages: Anthropic.MessageParam[] = [
-    { role: 'user', content: buildUserPrompt(args, 'Write the eBay (German) and Etsy (English) copy now.') },
+    {
+      role: 'user',
+      content: buildUserPrompt(args, `Write the eBay (German) and Etsy (${ETSY_LANGUAGE}) copy now.`),
+    },
   ]
 
   let lastError: z.ZodError | undefined

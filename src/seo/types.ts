@@ -137,7 +137,11 @@ export type PriceBand = z.infer<typeof PriceBandSchema>
 
 export const KeywordEvidenceSchema = z.object({
   marketplace: MarketplaceSchema,
-  /** Research is language-bound: eBay copy is German, Etsy copy is English. */
+  /**
+   * Research is language-bound. Both marketplaces are German today (the shop
+   * ships to Germany only); `en` stays in the enum because older records carry
+   * it from when the Etsy copy was English.
+   */
   language: z.enum(['de', 'en']),
   generatedAt: z.string(),
   /** The searches this was built from, so a result can be reproduced. */

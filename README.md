@@ -17,7 +17,9 @@ lister publish mw-1029890-a1b2c3 --marketplace etsy --draft
 
 1. Reads a MakerWorld model page — title, description, images, designer, licence.
 2. **Checks the licence** and decides whether the designer's images and text may be reused.
-3. Asks Claude for marketplace-native copy: German for eBay, English for Etsy.
+3. Asks Claude for marketplace-native copy — German for both, written natively
+   for each rather than translated (the shop ships within Germany only; see
+   "Language and market" below).
 4. Validates that copy against each marketplace's rules *before* sending it.
 5. Creates drafts, and publishes only when you say so.
 
@@ -139,6 +141,30 @@ or because it is your own model — `--i-have-commercial-rights` overrides the
 gate, and still asks for confirmation.
 
 **This is a routing aid, not legal advice.** It reads a field on a web page.
+
+### Language and market
+
+**Both marketplaces are German-language.** The shop ships within Germany only:
+packaging-law (VerpackG) registration and EPR duties are per country, so copy
+written for an international audience would attract exactly the orders that
+cannot be fulfilled. Etsy copy used to be English and switched on 2026-08-18.
+
+Consequences worth knowing:
+
+- Keyword research runs in German on both marketplaces, and Etsy research is
+  restricted to shops delivering to DE (`etsyBuyerCountry`). The Etsy sample is
+  smaller than the English one would be — that is the market you actually sell
+  into, not a worse measurement.
+- German compounds are long and Etsy tags are capped at 20 characters, so the
+  two-word form usually wins ("moosstab pflanzen", not
+  "zimmerpflanzenmoosstab").
+- `taxonomyHint` stays English: it is matched against Etsy's own category tree.
+- Listings created before the switch keep their English Etsy copy. Regenerate
+  with `lister keywords <id> -M etsy --rewrite`, then accept the proposal.
+
+To sell internationally again, three places change together: `ETSY_LANGUAGE` in
+`src/ai/composer.ts`, the research language in `src/seo/research.ts`, and the
+`etsyBuyerCountry` default in `src/settings.ts`.
 
 ### The Etsy authorship gate
 

@@ -530,7 +530,7 @@ program
       }
     }
     log.blank()
-    log.step('Etsy (English)')
+    log.step('Etsy (German)')
     log.info(listing.copy.etsy.title)
     log.detail(`Tags: ${listing.copy.etsy.tags.join(', ')}`)
     log.detail(`Materials: ${listing.copy.etsy.materials.join(', ')}`)

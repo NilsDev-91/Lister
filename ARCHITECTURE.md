@@ -166,6 +166,52 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 
 # Erkenntnisse, die Zeit gekostet haben
 
+## Nachtrag 2026-08-18 (3) — Etsy-Texte sind jetzt deutsch
+
+**Grund ist das Verpackungsgesetz, nicht der Geschmack.** VerpackG-Registrierung
+und EPR-Pflichten gelten **pro Land**; verkauft wird vorerst nur nach
+Deutschland. Ein englischer Etsy-Text wirbt damit genau um die Bestellungen,
+die nicht ausgeführt werden dürfen. eBay war immer deutsch, Etsy zieht nach.
+
+Drei Stellen müssen zusammenpassen und verweisen aufeinander:
+
+1. `ai/composer.ts` → `ETSY_LANGUAGE` (Prompt, Schema-Beschreibungen,
+   Titelvorschläge). **Ausnahme: `taxonomyHint` bleibt englisch** — er wird
+   gegen Etsys Kategoriebaum gematcht, und der ist englisch.
+2. `seo/research.ts` → `language = 'de'` für beide Marktplätze. Die Seeds
+   stammen aus dem Entwurfstext, also sucht die Etsy-Recherche jetzt deutsch.
+   **Die Stichprobe wird kleiner** — das ist der richtige Markt, nicht der
+   schlechtere.
+3. `settings.ts` → `etsyBuyerCountry` Default **`DE`** (vorher leer). Ein Shop,
+   der nicht nach Deutschland liefert, ist kein Wettbewerber und darf weder
+   Preisband noch Keywords prägen. Die alte Begründung („international, also
+   nicht einschränken") war an die englische Sprache gebunden und kippt mit ihr.
+
+Nebenwirkung, bewusst akzeptiert: `crudeStem` in `seo/coverage.ts` strippt
+englische Endungen und sieht jetzt deutsche Tags. Das kostet **Warnungen**,
+keine Daten — eine unbemerkte Überschneidung („moosstab"/„moosstäbe") ist ein
+Hinweis weniger. Deutsche Endungsliste erst, wenn die Warnungen spürbar fehlen.
+
+Neu im Prompt, weil es sonst Reparaturrunden kostet: **deutsche Komposita
+sprengen das 20-Zeichen-Limit für Etsy-Tags.** „zimmerpflanzenmoosstab" hat 22
+Zeichen und fällt beim Schema durch; die Zwei-Wort-Form, die ein Käufer ohnehin
+tippt, passt.
+
+**Beim Livetest gefunden: Das Modell schrieb Umlaute um** — „fuer", „Buero",
+„Kueche", „Einzelstueck". Kein Anzeigefehler, so lag es in `listings.json`. Es
+gibt dafür **keinen technischen Grund**: `EtsyTitleSchema`, `EtsyTagSchema` und
+`ETSY_MATERIAL_ILLEGAL` arbeiten alle mit `\p{L}`, Umlaute und ß sind also
+überall zulässig — die Zeichenregeln beschränken Interpunktion, nicht
+Buchstaben. Der Prompt sagt das jetzt ausdrücklich (beide Marktplätze) und
+nennt die Regeln explizit als Interpunktionsregeln. Danach: Etsy 5/5 mit
+echten Umlauten. **eBay zeigte weiterhin 1 von 5** mit „Buero Kueche" —
+Sampling-Varianz, kein Rückschritt durch die Sprachumstellung (eBay war immer
+deutsch). Die Fünf-Optionen-Auswahl ist die Stelle, an der das auffällt.
+
+**Bestehende Inserate behalten ihren englischen Etsy-Text** — Sprache ändert
+sich nicht rückwirkend. Neu erzeugen kostet einen Claude-Aufruf:
+`lister keywords <id> -M etsy --rewrite` (Entwurf, dann `proposal --accept`).
+
 ## Nachtrag 2026-08-18 (2) — Merkmals-Editor: eine Box je Merkmal
 
 **Die Textarea ist abgelöst.** Die alte Begründung („eine generierte Zeile je
@@ -910,8 +956,9 @@ Views einmal täglich. Ein zwei Tage altes Inserat mit 0 sagt nichts, eines mit
 Richtungen sind Rauschen.
 
 **Seeds kommen aus dem Entwurfstext, nicht von MakerWorld.** MakerWorld-Titel
-sind englisch, eBay-Texte deutsch. Von der Quellseite aus zu starten hieße, den
-deutschen Marktplatz mit englischen Wörtern zu durchsuchen.
+sind englisch, die eigenen Texte deutsch (seit 18.08. auf **beiden**
+Marktplätzen). Von der Quellseite aus zu starten hieße, einen
+deutschsprachigen Markt mit englischen Wörtern zu durchsuchen.
 
 **eBay-Facetten schlagen jede Titel-Analyse.** `ASPECT_REFINEMENTS` liefert die
 Item-Specifics **mit Trefferzahlen** — eBays eigener Index statt unserer

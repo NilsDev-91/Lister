@@ -264,8 +264,10 @@ function checkContent(listing: ListingRecord, marketplaces: Marketplace[], repor
       report.ok('eBay description carries no active content or external links')
     }
 
-    // The strongest researched phrase, checked against the mobile cut-off. Only
-    // the eBay evidence is usable here — the Etsy candidates are English.
+    // The strongest researched phrase, checked against the mobile cut-off. The
+    // eBay evidence, not Etsy's: both are German now, but a phrase that ranks
+    // on Etsy was measured against Etsy's index and says nothing about how
+    // eBay's literal search will treat an eBay title.
     const strongest = listing.seo?.ebay?.candidates.find((c) => c.usableAsTag)?.phrase ?? null
     for (const finding of auditEbayTitle(title, strongest)) {
       report.warn(finding.title, finding.detail)

@@ -34,8 +34,10 @@ export interface ResearchArgs {
   /**
    * Restrict Etsy results to shops delivering to this country.
    *
-   * Off by default: Etsy copy here is English and aimed at an international
-   * audience, so narrowing to one destination would mine the wrong market.
+   * DE by default now: the shop ships within Germany only (packaging law), so
+   * the competition that matters is the one a German buyer actually sees.
+   * Shops that do not deliver here are not competitors. This inverts the old
+   * default, which was off because the copy used to be English.
    */
   buyerCountry?: string | undefined
   /** Bypass the research cache and query the marketplaces live. */
@@ -87,7 +89,12 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
     )
   }
 
-  const language = marketplace === 'ebay' ? 'de' : 'en'
+  // German on both marketplaces. The seeds come from the draft copy, which is
+  // German everywhere since the shop ships to Germany only — so Etsy research
+  // now measures the German-language competition a German listing actually
+  // faces. It is a smaller sample than the English side would give; that is
+  // the correct market, not a worse one. Matches ETSY_LANGUAGE in ai/composer.
+  const language = 'de'
   let evidence = mine({
     marketplace,
     language,

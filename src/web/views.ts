@@ -667,7 +667,7 @@ function keywordPanel(listing: ListingRecord): string {
       // spatial question, and a marker on a line answers it faster than numbers.
       const price = evidence.priceBandEur ? priceScale(listing.product.priceEur, evidence.priceBandEur) : ''
 
-      return `<h4 style="margin:.9rem 0 .35rem">${marketplace === 'ebay' ? 'eBay · Deutsch' : 'Etsy · Englisch'}</h4>
+      return `<h4 style="margin:.9rem 0 .35rem">${marketplace === 'ebay' ? 'eBay · Deutsch' : 'Etsy · Deutsch'}</h4>
         <p class="note">${evidence.sampleSize} Inserate aus ${evidence.queries.length} Suchen · ${
           result.used.length
         } Empfehlung(en) im Text</p>
@@ -1082,7 +1082,7 @@ export function listingDetail({
           </div>
 
           <div class="card${listing.ownDesign || listing.etsyDesignRiskAccepted ? '' : ' locked'}">
-            <h3>Etsy · Englisch</h3>
+            <h3>Etsy · Deutsch</h3>
             ${
               listing.ownDesign
                 ? ''

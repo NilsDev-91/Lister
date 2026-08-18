@@ -5,9 +5,10 @@ import { normaliseTag, phrasesFromTitle } from './mine.js'
  * Picks the searches a research run starts from.
  *
  * The seeds come from the draft copy rather than from the MakerWorld page, and
- * that is the important choice. MakerWorld titles are English; eBay copy is
- * German. Seeding eBay research from the source page would search the German
- * marketplace with English words and mine whatever scraps came back.
+ * that is the important choice. MakerWorld titles are English; the copy here is
+ * German on both marketplaces. Seeding research from the source page would
+ * search a German-speaking market with English words and mine whatever scraps
+ * came back.
  *
  * Reading the draft instead means each marketplace is seeded in its own
  * language by construction — and it makes research a refinement pass over an

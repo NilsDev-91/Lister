@@ -79,8 +79,14 @@ export const ETSY_TAG_SLOTS = 13
  *
  * A real stemmer would be a dependency for one job. This only has to notice
  * that "3d print", "3d printed" and "3d prints" cover the same ground within a
- * single listing's thirteen tags. It leans English, which is where it is used:
- * eBay has no tag field, so this never sees German.
+ * single listing's thirteen tags.
+ *
+ * The suffixes are English, and since the Etsy copy switched to German this now
+ * runs on German tags — a known and accepted weakness. It costs a *warning*,
+ * never data: an unnoticed overlap ("moosstab" / "moosstäbe") means one hint
+ * fewer, and the German plural "-s" it does catch is a bonus rather than the
+ * design. Worth a German suffix list only if the overlap warnings start
+ * feeling absent.
  */
 export function crudeStem(word: string): string {
   if (word.length >= 6 && word.endsWith('ing')) return word.slice(0, -3)
