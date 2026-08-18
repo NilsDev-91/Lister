@@ -122,6 +122,16 @@ export async function captureViaLoopback(args: {
 
         if (error) {
           const description = requestUrl.searchParams.get('error_description') ?? error
+          // A denial carrying a FOREIGN state belongs to an older attempt — a
+          // stale tab where the user clicked "deny" long after starting over.
+          // Answer it and keep waiting for this flow's real callback; only a
+          // denial for THIS request (matching state, or none echoed) is fatal.
+          if (state && state !== args.expectedState) {
+            res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' }).end(
+              FAILURE_HTML('This tab belongs to an earlier attempt — finish the flow in the newest tab.'),
+            )
+            return
+          }
           res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' }).end(FAILURE_HTML(description))
           clearTimeout(timeout)
           reject(new UserError(`The marketplace refused authorisation: ${description}`))

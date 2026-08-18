@@ -118,7 +118,13 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
         notes,
       })
     } else {
-      notes.push('No follow-up searches ran; competition figures cover the seed queries only.')
+      // Appended to the evidence, not to `notes` — mine() has already copied
+      // that array, so a push there silently vanished (same trap as the
+      // cache note below; a limitation nobody sees reads like a complete run).
+      evidence = {
+        ...evidence,
+        notes: [...evidence.notes, 'No follow-up searches ran; competition figures cover the seed queries only.'],
+      }
     }
   }
 

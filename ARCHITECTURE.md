@@ -54,7 +54,8 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Recherche-Cache | fertig, **live E2E geprüft** (17.08.): Suchergebnisse 24 h auf Platte, `--fresh` umgeht ihn; Wiederholungslauf = 0 Quota, Kennzeichnung „(cache)" + Notiz in der Evidenz |
 | Etsy-API-ToS | gelesen und dokumentiert (`docs/research/etsy-api-terms.md`): Recherche ist **Grauzone**, Cache + Aggregat-only sind die Verteidigung |
 
-347 Tests, alle grün. `npm test && npm run build` läuft sauber.
+425 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
+`npm test && npm run build` läuft sauber.
 
 > `db.concurrency.test.ts` „is unsafe without the lock" ist ein
 > **Timing**-Negativtest: Er startet zwei echte Prozesse ohne Sperre und
@@ -163,6 +164,59 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-18 — Analyse-Runde (6-Dimensionen-Review + Funktionstest)
+
+Multi-Agent-Review (15/16 Agenten, adversarial verifiziert; die Dimension
+web-server brach mit Verbindungsfehler ab und ist offen) plus kompletter
+Hands-on-Test. Gefixt in dieser Runde:
+
+- **Guard-Segmentierung, zweimal:** Erst `&&`/`;`/`|`, dann der Review-Fund:
+  **Newlines fehlten im Split** — ein `--draft` auf Zeile 1 deckte ein echtes
+  publish auf Zeile 2. Regeln laufen jetzt pro Segment inkl. `\n`;
+  EBAY_ENV fail-closed über ALLE Quellen (Inline kann .env=production nicht
+  weißwaschen).
+- **Eigene Fotos via `--image-url` wurden als Quell-Downloads fehlklassiert**
+  (Staging-Fallback nannte sie `NN.ext`) — Etsy war dann mit falscher
+  Begründung dauerhaft gesperrt. `downloadImages` trägt jetzt ein
+  Namenspräfix; Verkäufer-URLs landen als `own-NN.ext`.
+  `looksLikeSourceDownload` matcht zudem `\d{2,}` (Bild 100+).
+- **Merkmals-Editor-Roundtrip korrumpierte zwei Fälle:** nackte
+  Anführungszeichen in Werten (`5" Zoll` → Quote-Toggle, Werte verschmolzen)
+  und Doppelpunkte in NAMEN (`Massstab 1:87` zerriss am ersten `:`). Werte
+  mit `"` werden jetzt gequotet; geparst wird am ersten `": "` (Fallback
+  nackter `:` für handgetippte Zeilen). Tests pinnen beide.
+- **Varianten-Preisparser** akzeptierte `Number()`-Syntax (`1e3`→1000,
+  `0x10`→16, Sub-Cent) — jetzt striktes Ziffernmuster, Menge nur ganzzahlig.
+- **Lost Updates in drei Commands:** `keywords` (2×) und `titles` upserteten
+  einen Snapshot, der über minutenlange Recherche-/Claude-Aufrufe gehalten
+  wurde — parallele UI-Saves gingen verloren. Vor jedem upsert wird frisch
+  gelesen (dasselbe Muster wie der Web-Bild-Upload-Fix vom 16.08.).
+- **„No follow-up searches ran"-Notiz verschwand** — nach `mine()` in das
+  bereits kopierte Array gepusht (gleiche Falle wie die Cache-Notiz).
+- **`publishOffer`-Lost-Response wedged nicht mehr:** Wirft der Publish, wird
+  das Offer GELESEN — meldet es sich als published, wird die Listing-ID
+  übernommen statt state=failed auf einem live Inserat. Kein zweiter
+  Publish-Call in keinem Fall.
+- **`createDraftListing` war retrybar** (Default 4 Versuche) — ein Timeout
+  nach Commit hätte Duplikat-Drafts geprägt. Jetzt `maxAttempts: 1` wie
+  createOffer/Bild-Upload.
+- **OAuth-Callback:** eine Ablehnung mit FREMDEM state (veralteter Tab)
+  bricht den frischen Flow nicht mehr ab.
+- **Recherche-Cache-GC:** Key-Format-Wechsel hinterließ verwaiste Dateien für
+  immer (im Live-Test an der marketplaceId-Erweiterung sichtbar geworden) —
+  Writes fegen jetzt abgelaufene/unlesbare Einträge.
+- **Rechte-Flash** nannte „zurückgenommen" neben „übernommen", wenn die
+  Lizenzbox nie gesetzt war — Meldung nennt nur noch echte Änderungen.
+
+**Verifiziert real, bewusst NUR dokumentiert** (Remote-Semantik, größerer
+Umbau): wiederverwendeter Etsy-Draft gleicht Bilder nie ab (Teil-Upload
+überlebt bis zur Aktivierung — braucht getListingImages-Abgleich).
+**Plausibel, unverifiziert:** SKU-Wechsel nach Draft/Publish desynct
+Offer↔Item; Draft-Reuse aktiviert Einzel-Inserate zu altem Preis/Menge
+(updateListingInventory bewusst nicht angebunden); Gruppen-Abbruch nach
+verlorener Group-Publish-Antwort. Die Dimension web-server (Routen, Jobs,
+Multipart) fiel dem Abbruch zum Opfer — bei Gelegenheit nachholen.
 
 ## Nachtrag 2026-08-17 — Optimierungs-Sitzung (Cache, ToS, Review-Fixes)
 

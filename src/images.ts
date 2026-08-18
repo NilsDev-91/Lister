@@ -39,7 +39,9 @@ const MAX_BYTES = 10 * 1024 * 1024 // Etsy rejects uploads above ~10 MB.
  * there, whatever the licence says.
  */
 export function looksLikeSourceDownload(path: string): boolean {
-  return /^\d{2}\.(jpe?g|png|gif|webp)$/i.test(path.split(/[\\/]/).pop() ?? '')
+  // `{2,}`: the counter pads to two digits but keeps counting — image 100
+  // arrives as `100.jpg` and must not slip past the Etsy gate.
+  return /^\d{2,}\.(jpe?g|png|gif|webp)$/i.test(path.split(/[\\/]/).pop() ?? '')
 }
 
 function extensionFor(url: string, contentType: string | null): string {
@@ -51,8 +53,16 @@ function extensionFor(url: string, contentType: string | null): string {
   return '.jpg'
 }
 
-/** Downloads remote images so Etsy can upload them. */
-export async function downloadImages(listingId: string, urls: string[]): Promise<string[]> {
+/**
+ * Downloads remote images so Etsy can upload them.
+ *
+ * `namePrefix` decides how the Etsy image rule later reads the files: the
+ * bare `NN.ext` names mark source-platform downloads (excluded from Etsy),
+ * while `own-NN.ext` marks the seller's own material — used when the URLs
+ * are the seller's own hosted photos, which merely happen to arrive here as
+ * downloads.
+ */
+export async function downloadImages(listingId: string, urls: string[], namePrefix = ''): Promise<string[]> {
   if (!urls.length) return []
 
   const dir = imageDirFor(listingId)
@@ -70,7 +80,10 @@ export async function downloadImages(listingId: string, urls: string[]): Promise
       continue
     }
 
-    const file = join(dir, `${String(index + 1).padStart(2, '0')}${extensionFor(url, response.headers.get('content-type'))}`)
+    const file = join(
+      dir,
+      `${namePrefix}${String(index + 1).padStart(2, '0')}${extensionFor(url, response.headers.get('content-type'))}`,
+    )
     await writeFile(file, buffer)
     paths.push(file)
   }
@@ -133,8 +146,13 @@ export async function stageImages(args: {
     urls.push(...sourceUrls)
   }
   if (!paths.length && urls.length) {
-    // Etsy needs bytes; fetch whatever we have URLs for.
-    paths.push(...(await downloadImages(listingId, urls)))
+    // Etsy needs bytes; fetch whatever we have URLs for. When those URLs are
+    // the seller's own hosted photos (--image-url), the files must NOT carry
+    // the source-download names — the Etsy image rule would misread the
+    // seller's own material as designer renders and block the channel.
+    // (`urls` is exactly `hostedUrls` when any were given; source URLs only
+    // enter this list when there are none.)
+    paths.push(...(await downloadImages(listingId, urls, hostedUrls.length ? 'own-' : '')))
   }
 
   return { urls, paths }

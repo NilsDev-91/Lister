@@ -62,3 +62,25 @@ describe('EbayVariantsSchema', () => {
     expect(EbayVariantsSchema.safeParse([long]).success).toBe(false)
   })
 })
+
+describe('strict number parsing (Review 18.08.)', () => {
+  it('rejects scientific notation, hex and sub-cent prices', () => {
+    for (const price of ['1e3', '0x10', '0,005', '19.999']) {
+      const { variants, errors } = parseVariants(`WW-A; Rot; ${price}; 1`)
+      expect(variants, price).toHaveLength(0)
+      expect(errors.join(' '), price).toMatch(/kein Preis/)
+    }
+  })
+
+  it('rejects scientific notation as a quantity', () => {
+    const { variants, errors } = parseVariants('WW-A; Rot; 19,90; 1e2')
+    expect(variants).toHaveLength(0)
+    expect(errors.join(' ')).toMatch(/keine St/)
+  })
+
+  it('still accepts ordinary German and dotted prices', () => {
+    const { variants, errors } = parseVariants('WW-A; Rot; 19,90; 3\nWW-B; Blau; 21.5; 2')
+    expect(errors).toHaveLength(0)
+    expect(variants.map((v) => v.priceEur)).toEqual([19.9, 21.5])
+  })
+})

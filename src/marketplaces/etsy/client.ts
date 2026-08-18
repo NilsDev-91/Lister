@@ -413,7 +413,11 @@ export async function createDraftListing(args: DraftListingArgs): Promise<EtsyLi
   }
 
   try {
-    return await call<EtsyListing>(`/shops/${args.shopId}/listings`, { method: 'POST', form })
+    // Not retried: draft creation is not idempotent. A timeout after Etsy has
+    // committed would mint a duplicate draft per retry — free, but each one an
+    // orphan in Shop Manager that the reuse logic can never find again. Same
+    // rule as createOffer and the image upload.
+    return await call<EtsyListing>(`/shops/${args.shopId}/listings`, { method: 'POST', form, maxAttempts: 1 })
   } catch (error) {
     return explain(error, 'Creating the Etsy draft listing')
   }

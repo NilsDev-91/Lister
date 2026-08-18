@@ -11,14 +11,18 @@
  */
 
 /**
- * A value carrying the separator is quoted, so it survives the round trip.
+ * A value carrying the separator OR a quote is quoted, so it survives the
+ * round trip.
  *
  * eBay values legitimately contain commas — "Höhe 1,5 cm", "Rot, matt" — and
  * without quoting, formatting then re-parsing split one value into two. The
- * quote character itself is escaped by doubling, CSV-style.
+ * quote character itself is escaped by doubling, CSV-style — and any bare
+ * quote forces quoting too: an unquoted inch mark (`5" Zoll`) read back as a
+ * quoting toggle, silently dropping the character and swallowing the next
+ * comma split.
  */
 function formatValue(value: string): string {
-  return value.includes(',') || value.startsWith('"') ? `"${value.replace(/"/g, '""')}"` : value
+  return value.includes(',') || value.includes('"') ? `"${value.replace(/"/g, '""')}"` : value
 }
 
 export function formatAspects(aspects: Record<string, string[]>): string {
@@ -41,7 +45,13 @@ export function parseAspects(input: string): Record<string, string[]> {
     const trimmed = line.trim()
     if (!trimmed) continue
 
-    const colon = trimmed.indexOf(':')
+    // The formatter always emits ": " between name and values, so ": " is the
+    // separator of record — an aspect NAME may itself contain a bare colon
+    // (scale notation like "Massstab 1:87"), and splitting at the first ":"
+    // broke such names apart. Hand-typed lines without the space ("Farbe:Rot")
+    // still parse via the bare-colon fallback.
+    const colonSpace = trimmed.indexOf(': ')
+    const colon = colonSpace !== -1 ? colonSpace : trimmed.indexOf(':')
     if (colon === -1) continue
 
     const name = trimmed.slice(0, colon).trim()

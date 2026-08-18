@@ -60,3 +60,24 @@ describe('parseAspects', () => {
     })
   })
 })
+
+describe('roundtrip corruption regressions (Review 18.08.)', () => {
+  it('keeps a bare quote in a value — the inch mark is not a quoting toggle', () => {
+    const aspects = { Groesse: ['5" Zoll', 'klein'] }
+    expect(parseAspects(formatAspects(aspects))).toEqual(aspects)
+  })
+
+  it('keeps a trailing-quote-only value intact', () => {
+    const aspects = { Breite: ['12"'] }
+    expect(parseAspects(formatAspects(aspects))).toEqual(aspects)
+  })
+
+  it('keeps an aspect name that contains scale-notation colons', () => {
+    const aspects = { 'Massstab 1:87': ['H0'] }
+    expect(parseAspects(formatAspects(aspects))).toEqual(aspects)
+  })
+
+  it('still parses a hand-typed line without a space after the colon', () => {
+    expect(parseAspects('Farbe:Rot')).toEqual({ Farbe: ['Rot'] })
+  })
+})

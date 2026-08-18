@@ -278,7 +278,22 @@ async function publishToEbay(listing: ListingRecord, options: PublishOptions): P
   }
 
   io.step('eBay: publishing…')
-  const listingId = await ebay.publishOffer(offerId)
+  let listingId: string
+  try {
+    listingId = await ebay.publishOffer(offerId)
+  } catch (error) {
+    // A publish is never re-fired — but a lost RESPONSE is not a failed
+    // publish. If eBay committed before the timeout, the record would stay
+    // 'draft' while fees accrue on a live listing, and every re-run would
+    // wedge on re-publishing an already-published offer. A read settles it:
+    // recover the listing id if the offer reports itself published, rethrow
+    // otherwise. No second publish call either way.
+    const remote = await ebay.getOffer(offerId).catch(() => undefined)
+    const liveListingId = remote?.listing?.listingId
+    if (!liveListingId) throw error
+    io.warn('The publish call failed mid-flight, but eBay reports the offer as published — recovering the listing id.')
+    listingId = liveListingId
+  }
   const url = ebay.listingUrl(listingId)
   updateMarketplace(listing.id, 'ebay', { state: 'published', liveId: listingId, url, error: null })
   io.ok(`Live on eBay: ${url}`)

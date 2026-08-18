@@ -27,11 +27,25 @@ export interface ParsedVariants {
   errors: string[]
 }
 
-/** Accepts both decimal separators; the seller thinks in commas, eBay in dots. */
+/**
+ * Accepts both decimal separators; the seller thinks in commas, eBay in dots.
+ *
+ * Deliberately a strict digit pattern rather than `Number()`: that parser also
+ * accepts scientific notation and hex ("1e3" → 1000, "0x10" → 16) and
+ * sub-cent fractions — a typo would publish a silently different price than
+ * the seller typed. Two decimals is what a price is.
+ */
 function parseEuro(raw: string): number | null {
-  const normalised = raw.trim().replace(',', '.')
-  const value = Number(normalised)
-  return normalised && Number.isFinite(value) ? value : null
+  const trimmed = raw.trim()
+  if (!/^\d{1,6}(?:[.,]\d{1,2})?$/.test(trimmed)) return null
+  return Number(trimmed.replace(',', '.'))
+}
+
+/** Whole numbers only — "1e2" is a typo, not a hundred pieces. */
+function parseQuantity(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!/^\d{1,6}$/.test(trimmed)) return null
+  return Number(trimmed)
 }
 
 export function parseVariants(input: string): ParsedVariants {
@@ -50,13 +64,13 @@ export function parseVariants(input: string): ParsedVariants {
 
     const [sku, colour, priceRaw, quantityRaw] = parts as [string, string, string, string]
     const priceEur = parseEuro(priceRaw)
-    const quantity = parseEuro(quantityRaw)
+    const quantity = parseQuantity(quantityRaw)
 
     if (priceEur === null) {
       errors.push(`Zeile ${index + 1}: "${priceRaw}" ist kein Preis`)
       continue
     }
-    if (quantity === null || !Number.isInteger(quantity)) {
+    if (quantity === null) {
       errors.push(`Zeile ${index + 1}: "${quantityRaw}" ist keine Stückzahl`)
       continue
     }

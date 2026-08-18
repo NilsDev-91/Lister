@@ -85,7 +85,10 @@ export async function keywordsCommand(options: KeywordsOptions): Promise<Listing
 
   // Saved before any rewrite, so a failed or declined `--apply` still leaves
   // the research on the record rather than throwing away calls already spent.
-  let updated: ListingRecord = { ...listing, seo: evidence, updatedAt: new Date().toISOString() }
+  // Re-read first: the searches above run for minutes, and an upsert of the
+  // stale snapshot would silently revert anything saved meanwhile (the same
+  // lost update the web UI's image upload once had).
+  let updated: ListingRecord = { ...(get(options.id) ?? listing), seo: evidence, updatedAt: new Date().toISOString() }
   upsert(updated)
 
   for (const marketplace of options.marketplaces) {
@@ -110,9 +113,10 @@ export async function keywordsCommand(options: KeywordsOptions): Promise<Listing
   const basedOn = (['ebay', 'etsy'] as const).filter((m) => evidence[m] !== null)
 
   // Stored, not applied. The seller decides in a separate step, and that step
-  // applies this exact text rather than asking the model again.
+  // applies this exact text rather than asking the model again. Re-read again:
+  // the Claude call above holds the snapshot for half a minute.
   updated = {
-    ...updated,
+    ...(get(options.id) ?? updated),
     proposal: { copy, createdAt: new Date().toISOString(), basedOn: [...basedOn] },
     updatedAt: new Date().toISOString(),
   }

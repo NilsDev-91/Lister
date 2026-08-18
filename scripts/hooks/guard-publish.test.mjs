@@ -280,6 +280,19 @@ describe('per-segment evaluation — no cross-segment whitewashing', () => {
     expect(r.status).toBe(0)
   })
 
+  it('newlines separate segments too — a --draft on line one covers nothing on line two', () => {
+    const r = runGuard('lister publish A --draft\nlister publish B -M ebay', { dotenv: PRODUCTION })
+    expect(r.status).toBe(2)
+  })
+
+  it('newlines also stop cross-line condemnation of unrelated commands', () => {
+    const r = runGuard(
+      'curl https://api.etsy.com/v3/application/listings/1\nsystemctl set-property foo state=active',
+      { dotenv: SANDBOX },
+    )
+    expect(r.status).toBe(0)
+  })
+
   it('an inline EBAY_ENV=sandbox cannot whitewash a production .env', () => {
     // The guard cannot model which segment an export reaches, so ANY
     // non-sandbox source makes the line count as production — fail closed.

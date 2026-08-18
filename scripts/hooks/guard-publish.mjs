@@ -41,10 +41,15 @@ for (const segment of segments(command)) {
 }
 process.exit(0)
 
-/** Splits a shell command line at &&, ||, ;, | and & into its commands. */
+/**
+ * Splits a shell command line at &&, ||, ;, |, & and NEWLINES into its
+ * commands. Newlines matter twice: without them a `--draft` on line one
+ * whitewashed a real publish on line two, and an Etsy host on one line
+ * condemned an unrelated `state=active` on another.
+ */
 function segments(cmd) {
   return cmd
-    .split(/(?:\|\||&&|[;|&])+/)
+    .split(/(?:\|\||&&|[;|&\r\n])+/)
     .map((s) => s.trim())
     .filter(Boolean)
 }

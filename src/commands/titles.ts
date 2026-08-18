@@ -48,8 +48,11 @@ export async function titlesCommand(options: TitlesOptions): Promise<ListingReco
     )
   }
 
+  // Re-read before writing: the Claude call above held the snapshot for half
+  // a minute, and upserting it whole would silently revert anything the web
+  // UI saved meanwhile.
   const updated: ListingRecord = {
-    ...listing,
+    ...(get(options.id) ?? listing),
     titleOptions: { ebay: result.ebay, etsy: result.etsy, createdAt: new Date().toISOString() },
     updatedAt: new Date().toISOString(),
   }
