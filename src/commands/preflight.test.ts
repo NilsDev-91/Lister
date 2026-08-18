@@ -122,6 +122,28 @@ describe('preflight rights checks', () => {
     expect(report.blockers.map((b) => b.title)).not.toContain("Listing uses the designer's own images")
   })
 
+  it("blocks Cults3D-hosted images the same way as MakerWorld's", () => {
+    // The host list is per source platform, not per MakerWorld: a designer's
+    // render is a designer's render whichever CDN serves it. These are the
+    // three hosts real Cults3D responses actually use (see
+    // sources/cults3d/__fixtures__/creation-flexi-turtle.json).
+    for (const url of [
+      'https://images.cults3d.com/abc=/516x516/filters:no_upscale()/https://fbi.cults3d.com/x/img.png',
+      'https://videos.cults3d.com/abc=/516x516/x/turtle.gif',
+      'https://fbi.cults3d.com/uploaders/1/illustration-file/x/img.png',
+    ]) {
+      const report = auditContent(listing({ licenseOverridden: true, imageUrls: [url] }), ['ebay'])
+      expect(report.blockers.map((b) => b.title), url).toContain("Listing uses the designer's own images")
+    }
+  })
+
+  it('blocks copy that names a Cults3D licence under separate rights', () => {
+    const withLicence = listing({ licenseOverridden: true })
+    withLicence.copy.ebay.descriptionHtml = '<p>Lizenz: CULTS PU - Private Use.</p>'
+    const report = auditContent(withLicence, ['ebay'])
+    expect(report.blockers.some((b) => /names a licence/i.test(b.title))).toBe(true)
+  })
+
   it('blocks copy that names a licence when the sale runs under separate rights', () => {
     const withLicence = listing({ licenseOverridden: true })
     withLicence.copy.ebay.descriptionHtml = '<p>Gedruckt unter der Standard Digital File License.</p>'

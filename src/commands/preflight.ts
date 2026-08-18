@@ -67,12 +67,17 @@ export class Report {
   }
 }
 
-/** Hosts that serve MakerWorld's own media. */
-const MAKERWORLD_HOSTS = /(^|\.)(makerworld\.com|bblmw\.com|bblmw\.cn)$/i
+/**
+ * Hosts that serve a source platform's own media. One list for all platforms:
+ * a designer's render is a designer's render, whichever CDN it sits on —
+ * `images.cults3d.com`, `videos.cults3d.com` and `fbi.cults3d.com` are
+ * subdomains and matched by the suffix rule.
+ */
+const SOURCE_MEDIA_HOSTS = /(^|\.)(makerworld\.com|bblmw\.com|bblmw\.cn|cults3d\.com)$/i
 
-function isMakerWorldAsset(url: string): boolean {
+function isSourceMediaAsset(url: string): boolean {
   try {
-    return MAKERWORLD_HOSTS.test(new URL(url).hostname)
+    return SOURCE_MEDIA_HOSTS.test(new URL(url).hostname)
   } catch {
     return false
   }
@@ -80,7 +85,7 @@ function isMakerWorldAsset(url: string): boolean {
 
 /** Licence names that must never appear in copy sold under separate rights. */
 const LICENCE_MENTION =
-  /standard digital file license|creative commons|\bCC[\s-]?BY\b|\bCC0\b|makerworld exclusive/i
+  /standard digital file license|creative commons|\bCC[\s-]?BY\b|\bCC0\b|makerworld exclusive|\bcults\b/i
 
 // ---------------------------------------------------------------------------
 // Checks that need no network
@@ -196,11 +201,11 @@ function checkContent(listing: ListingRecord, marketplaces: Marketplace[], repor
   }
 
   if (!decision.mayReuseImages) {
-    const reused = listing.imageUrls.filter(isMakerWorldAsset)
+    const reused = listing.imageUrls.filter(isSourceMediaAsset)
     if (reused.length) {
       report.block(
         "Listing uses the designer's own images",
-        `${reused.length} image URL(s) point at MakerWorld's CDN. ` +
+        `${reused.length} image URL(s) point at the source platform's CDN. ` +
           (listing.licenseOverridden
             ? 'A commercial licence bought from a creator covers the model; their photos and renders are separate content that stays theirs.'
             : `The licence on the source page ("${listing.source.license.raw}") does not permit selling prints at all, and it certainly does not hand over the designer's photographs.`) +

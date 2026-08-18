@@ -172,6 +172,46 @@ describe('gate', () => {
   })
 })
 
+describe('a sale-only licence (Cults3D CU family, MIT)', () => {
+  // Verified against cults3d.com/en/licenses (2026-08-18): CU grants "print,
+  // sell and distribute 3D prints" and says nothing about the designer's
+  // photos or description. The sale is licensed; the page media are not.
+  const cu = normaliseLicense('CULTS CU - Commercial Use', 'CULTS3D')
+
+  it('permits the sale without a confirmation prompt', () => {
+    const d = gate(cu)
+    expect(cu.commercialUse).toBe('yes')
+    expect(d.needsConfirmation).toBe(false)
+    expect(d.overridden).toBe(false)
+  })
+
+  it("keeps the designer's photos and text off-limits by default", () => {
+    const d = gate(cu)
+    expect(d.mayReuseImages).toBe(false)
+    expect(d.mayReuseText).toBe(false)
+    expect(d.reason).toMatch(/not shown to be included/i)
+  })
+
+  it('unlocks the photos only through the separate images claim, never the text', () => {
+    // The same second claim the override path takes, for the same reason.
+    const d = gate(cu, false, true)
+    expect(d.mayReuseImages).toBe(true)
+    expect(d.mayReuseText).toBe(false)
+  })
+
+  it('leaves the Creative Commons family untouched — CC covers the page media', () => {
+    for (const [raw, platform] of [
+      ['CC BY - Attribution', 'CULTS3D'],
+      ['CC0 - Creative Commons public domain', 'CULTS3D'],
+      ['BY', 'MAKERWORLD'],
+    ] as const) {
+      const d = gate(normaliseLicense(raw, platform))
+      expect(d.mayReuseImages, raw).toBe(true)
+      expect(d.mayReuseText, raw).toBe(true)
+    }
+  })
+})
+
 describe('the separate claim on the designer\'s images', () => {
   const sdfl = normaliseLicense('Standard Digital File License', 'MAKERWORLD')
 

@@ -1,0 +1,118 @@
+{
+ "data": {
+  "licenses": [
+   {
+    "code": "cults_pu",
+    "name": "CULTS PU - Private Use",
+    "spdxId": "LicenseRef-Cults-PU",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": true
+   },
+   {
+    "code": "cults_cu",
+    "name": "CULTS CU - Commercial Use",
+    "spdxId": "LicenseRef-Cults-CU",
+    "allowsCommercialUse": true,
+    "availableOnFreeDesigns": false,
+    "availableOnPricedDesigns": true
+   },
+   {
+    "code": "cults_cu_nd",
+    "name": "CULTS CU-ND - Commercial Use - No Derivative",
+    "spdxId": "LicenseRef-Cults-CU-ND",
+    "allowsCommercialUse": true,
+    "availableOnFreeDesigns": false,
+    "availableOnPricedDesigns": true
+   },
+   {
+    "code": "cc_by",
+    "name": "CC BY - Attribution",
+    "spdxId": "CC-BY-4.0",
+    "allowsCommercialUse": true,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "cc_by_sa",
+    "name": "CC BY-SA - Attribution - Share alike",
+    "spdxId": "CC-BY-SA-4.0",
+    "allowsCommercialUse": true,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "cc_by_nd",
+    "name": "CC BY-ND - Attribution - No derivatives",
+    "spdxId": "CC-BY-ND-4.0",
+    "allowsCommercialUse": true,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "cc_by_nc",
+    "name": "CC BY-NC - Attribution - Non commercial",
+    "spdxId": "CC-BY-NC-4.0",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "cc_by_nc_sa",
+    "name": "CC BY-NC-SA - Attribution - Non commercial - Share alike",
+    "spdxId": "CC-BY-NC-SA-4.0",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "cc_by_nc_nd",
+    "name": "CC BY-NC-ND - Attribution - Non commercial - No derivatives",
+    "spdxId": "CC-BY-NC-ND-4.0",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "cc_pddc",
+    "name": "CC0 - Creative Commons public domain",
+    "spdxId": "CC0-1.0",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "cern_ohl",
+    "name": "CERN OHL - CERN Open Hardware Licence 1.2",
+    "spdxId": "CERN-OHL-1.2",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "gpl",
+    "name": "GNU GPL - GNU General Public License 3.0",
+    "spdxId": "GPL-3.0-or-later",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "lgpl",
+    "name": "GNU LGPL - GNU Lesser General Public License 3.0",
+    "spdxId": "LGPL-3.0-or-later",
+    "allowsCommercialUse": false,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   },
+   {
+    "code": "mit",
+    "name": "MIT License",
+    "spdxId": "MIT",
+    "allowsCommercialUse": true,
+    "availableOnFreeDesigns": true,
+    "availableOnPricedDesigns": false
+   }
+  ]
+ }
+}

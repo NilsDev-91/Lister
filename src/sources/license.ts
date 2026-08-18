@@ -73,6 +73,106 @@ const MAKERWORLD_LICENSES: Record<string, LicenseEntry> = {
 }
 
 /**
+ * Cults3D's licence catalog, verified against the live `licenses` query on
+ * 2026-08-18 — `code`, `name` and `spdxId` below are the platform's own values
+ * (fixture: cults3d/__fixtures__/licenses.json). Keyed by both the code and
+ * the English display name, because the adapter passes the readable name and
+ * the code is the stable fallback.
+ *
+ * The verdicts follow the licence terms, cross-checked against the platform's
+ * `allowsCommercialUse` flag. Two places disagree, and the entries say which
+ * side wins:
+ *
+ *  - Cults3D flags CC0 as non-commercial. CC0-1.0 waives all rights — the
+ *    licence text governs, so it stays `yes`, same as everywhere else.
+ *  - It flags GPL/LGPL/CERN-OHL as non-commercial although their texts permit
+ *    commercial use with conditions. Whether those conditions reach a
+ *    *printed object* at all is unsettled, so they stay `unknown` and route
+ *    to the prompt — the state for "the user may know more than the page".
+ */
+function cults3dLicenses(): Record<string, LicenseEntry> {
+  const entries: [code: string, name: string, entry: LicenseEntry][] = [
+    ['cults_pu', 'CULTS PU - Private Use', {
+      code: 'LicenseRef-Cults-PU',
+      commercial: 'no',
+      note: "Cults3D's default Private Use licence is personal-use only.",
+    }],
+    ['cults_cu', 'CULTS CU - Commercial Use', {
+      code: 'LicenseRef-Cults-CU',
+      commercial: 'yes',
+      note: "Cults3D's Commercial Use licence permits selling prints.",
+    }],
+    ['cults_cu_nd', 'CULTS CU-ND - Commercial Use - No Derivative', {
+      code: 'LicenseRef-Cults-CU-ND',
+      commercial: 'yes',
+      note: 'Commercial use of the design as published — derivatives are not covered.',
+    }],
+    ['cc_by', 'CC BY - Attribution', {
+      code: 'CC-BY-4.0',
+      commercial: 'yes',
+      note: 'Attribution required.',
+    }],
+    ['cc_by_sa', 'CC BY-SA - Attribution - Share alike', {
+      code: 'CC-BY-SA-4.0',
+      commercial: 'yes',
+      note: 'Attribution required. ShareAlike governs derivative models, not the sale of a print.',
+    }],
+    ['cc_by_nd', 'CC BY-ND - Attribution - No derivatives', {
+      code: 'CC-BY-ND-4.0',
+      commercial: 'yes',
+      note: 'Attribution required. You may sell prints of the model as published, but not of a modified version.',
+    }],
+    ['cc_by_nc', 'CC BY-NC - Attribution - Non commercial', {
+      code: 'CC-BY-NC-4.0',
+      commercial: 'no',
+      note: 'The NonCommercial term forbids selling prints.',
+    }],
+    ['cc_by_nc_sa', 'CC BY-NC-SA - Attribution - Non commercial - Share alike', {
+      code: 'CC-BY-NC-SA-4.0',
+      commercial: 'no',
+      note: 'The NonCommercial term forbids selling prints.',
+    }],
+    ['cc_by_nc_nd', 'CC BY-NC-ND - Attribution - Non commercial - No derivatives', {
+      code: 'CC-BY-NC-ND-4.0',
+      commercial: 'no',
+      note: 'The NonCommercial term forbids selling prints.',
+    }],
+    ['cc_pddc', 'CC0 - Creative Commons public domain', {
+      code: 'CC0-1.0',
+      commercial: 'yes',
+      note: 'Public domain: commercial use is permitted and no attribution is required. (Cults3D\'s own filter flag says otherwise; the licence text governs.)',
+    }],
+    ['mit', 'MIT License', {
+      code: 'MIT',
+      commercial: 'yes',
+      note: 'The MIT License permits commercial use; keep the licence notice with the design files.',
+    }],
+    ['gpl', 'GNU GPL - GNU General Public License 3.0', {
+      code: 'GPL-3.0-or-later',
+      commercial: 'unknown',
+      note: 'The GPL permits commercial use of the files under copyleft conditions, but whether those conditions bind a printed object is unsettled — and Cults3D itself flags this licence as non-commercial. Decide deliberately.',
+    }],
+    ['lgpl', 'GNU LGPL - GNU Lesser General Public License 3.0', {
+      code: 'LGPL-3.0-or-later',
+      commercial: 'unknown',
+      note: 'The LGPL permits commercial use of the files under copyleft conditions, but whether those conditions bind a printed object is unsettled — and Cults3D itself flags this licence as non-commercial. Decide deliberately.',
+    }],
+    ['cern_ohl', 'CERN OHL - CERN Open Hardware Licence 1.2', {
+      code: 'CERN-OHL-1.2',
+      commercial: 'unknown',
+      note: 'The CERN OHL permits commercial manufacture under documentation conditions, but Cults3D itself flags this licence as non-commercial. Decide deliberately.',
+    }],
+  ]
+
+  const table: Record<string, LicenseEntry> = {}
+  for (const [code, name, entry] of entries) {
+    table[code] = entry
+    table[name.toLowerCase()] = entry
+  }
+  return table
+}
+
+/**
  * Each platform speaks its own licence vocabulary, so the exact-match lookup
  * is per platform: MakerWorld's bare `BY-NC` must not be assumed to mean the
  * same thing when a different platform emits it — an unrecognised value routes
@@ -85,7 +185,7 @@ const MAKERWORLD_LICENSES: Record<string, LicenseEntry> = {
  */
 const PLATFORM_LICENSES: Record<Platform, Record<string, LicenseEntry>> = {
   MAKERWORLD: MAKERWORLD_LICENSES,
-  CULTS3D: {},
+  CULTS3D: cults3dLicenses(),
   PRINTABLES: {},
 }
 
@@ -299,14 +399,27 @@ export function gate(
   }
 
   switch (license.commercialUse) {
-    case 'yes':
+    case 'yes': {
+      // A licence can permit the sale without touching the page's media. The
+      // Creative Commons family attaches to the published content as a whole,
+      // photos and text included — but a sale-only licence like Cults3D's CU
+      // grants "print, sell and distribute 3D prints" and says nothing about
+      // the designer's photos or description (verified against
+      // cults3d.com/en/licenses, 2026-08-18); MIT covers the uploaded files,
+      // not the page. There the media stay the designer's unless the seller
+      // separately asserts otherwise — the same second claim the override
+      // path takes, and for the same reason.
+      const coversPageMedia = license.code !== null && /^CC(0|-BY)/.test(license.code)
       return {
-        mayReuseImages: true,
-        mayReuseText: true,
+        mayReuseImages: coversPageMedia || sourceImagesLicensed,
+        mayReuseText: coversPageMedia,
         needsConfirmation: false,
         overridden: false,
-        reason: license.reason,
+        reason: coversPageMedia
+          ? license.reason
+          : `${license.reason} The licence covers selling prints; the designer's photos and description are not shown to be included.`,
       }
+    }
     case 'no':
     case 'unknown':
       return {

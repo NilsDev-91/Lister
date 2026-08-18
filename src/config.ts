@@ -155,6 +155,25 @@ export const config = {
     },
   },
 
+  cults3d: {
+    /**
+     * HTTP Basic credentials: `Authorization: Basic base64(username:api_key)`.
+     * The key is self-service — any Cults3D account can mint one at
+     * https://cults3d.com/en/api/keys — but the API refuses every query
+     * without it, introspection included.
+     */
+    get username(): string {
+      return required('CULTS3D_USERNAME', 'Your Cults3D account name; create an API key at https://cults3d.com/en/api/keys')
+    },
+    get apiKey(): string {
+      return required('CULTS3D_API_KEY', 'Create an API key at https://cults3d.com/en/api/keys')
+    },
+    /** For status displays: configured or not, never the values. */
+    get configured(): boolean {
+      return Boolean(process.env['CULTS3D_USERNAME'] && process.env['CULTS3D_API_KEY'])
+    },
+  },
+
   etsy: {
     get keystring(): string {
       return required('ETSY_KEYSTRING', 'Register an app at https://www.etsy.com/developers/your-apps')
