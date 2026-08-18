@@ -149,6 +149,13 @@ textarea { min-height:8rem; resize:vertical; line-height:1.5; }
   font-size:.7rem; color:var(--dim); cursor:pointer;
 }
 .aspect-rm input { cursor:pointer; }
+/* Discards an empty box outright — it holds nothing, so there is nothing to
+   confirm. A saved value takes the checkbox above instead. */
+.aspect-x {
+  background:none; border:0; padding:0 .1rem; line-height:1; cursor:pointer;
+  color:var(--dim); font-size:.8rem;
+}
+.aspect-x:hover { color:var(--bad); }
 .aspect.dropping { opacity:.45; }
 .aspect.dropping .field { text-decoration:line-through; }
 
@@ -471,25 +478,33 @@ if (aspects) {
     if (value) value.required = e.target.value.trim().length > 0;
   });
 
+  // An empty box holds nothing, so discarding it is a plain removal with
+  // nothing to confirm and nothing to tell the server: the fields simply stop
+  // being submitted, and the parser reads whatever indices arrive.
+  aspects.addEventListener('click', (e) => {
+    const x = e.target.closest('.aspect-x');
+    if (!x) return;
+    const box = x.closest('.aspect');
+    if (box) box.remove();
+  });
+
+  // Fresh boxes come from the template, never from a copy of a visible one:
+  // removing every blank box would otherwise leave nothing to clone from.
   const add = document.getElementById('aspect-add');
-  if (add) {
+  const template = document.getElementById('aspect-blank');
+  if (add && template) {
+    // Counts up rather than following the DOM, so an index cannot repeat after
+    // a removal — two boxes sharing a name would merge into one aspect.
+    let next = aspects.children.length;
     add.addEventListener('click', () => {
-      const blanks = aspects.querySelectorAll('.aspect.blank');
-      const template = blanks[blanks.length - 1];
-      if (!template) return;
-      // Cloned rather than built from markup: the template is already the
-      // shape the server parses, so the two cannot drift.
-      const row = template.cloneNode(true);
-      const index = aspects.children.length;
+      const row = template.content.firstElementChild.cloneNode(true);
+      const index = next++;
       const name = row.querySelector('input[name^="aspectName"]');
       const value = row.querySelector('input[name^="aspectValue"]');
       const label = row.querySelector('label');
       name.name = 'aspectName' + index;
-      name.value = '';
       value.name = 'aspectValue' + index;
-      value.value = '';
       value.id = 'aspect-v-' + index;
-      value.required = false;
       if (label) label.setAttribute('for', value.id);
       aspects.appendChild(row);
       name.focus();

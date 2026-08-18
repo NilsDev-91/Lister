@@ -196,7 +196,17 @@ Textarea-Funktionen waren danach toter Code). Die Regeln:
   bleiben die gespeicherten Merkmale stehen. Schweigen ist kein Löschbefehl;
   live gegengeprüft, alle 6 Merkmale überlebten.
 - Leere Boxen am Ende plus „+ Merkmal" erhalten das, was die Textarea konnte:
-  ein Merkmal hinzufügen, das die Kategorie verlangt.
+  ein Merkmal hinzufügen, das die Kategorie verlangt. Eine leere Box wirft ✕
+  wieder weg — rein clientseitig, weil sie nichts enthält; „+ Merkmal" klont
+  ein `<template>`, nicht die letzte sichtbare Box, sonst wäre der Knopf tot,
+  sobald man alle leeren Boxen entfernt hat.
+- **Werte werden mit SEMIKOLON getrennt, nicht mit Komma** — im Livetest
+  gefunden: `0,16 mm` wurde beim Tippen still zu `["0", "16 mm"]`. Gespeicherte
+  Werte überlebten (sie werden beim Rendern gequotet), frisch getippte nicht —
+  die schlimmere Hälfte, weil der Verkäufer zusieht und nichts merkt. Deutsche
+  Werte tragen ständig Dezimalkommas; der Varianten-Editor hat denselben
+  Konflikt schon mit `;` gelöst, jetzt macht dieser Editor es genauso.
+  Gequotet wird nur noch, was ein `;` oder `"` enthält.
 
 ## Nachtrag 2026-08-18 — Analyse-Runde (6-Dimensionen-Review + Funktionstest)
 

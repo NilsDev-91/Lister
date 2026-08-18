@@ -26,13 +26,16 @@ describe('aspectRows', () => {
     const rows = aspectRows({ Marke: ['Markenlos'], Material: ['PLA', 'PETG'] }, [], 0)
     expect(rows).toEqual([
       { name: 'Marke', value: 'Markenlos', requiredByEbay: false, locked: true },
-      { name: 'Material', value: 'PLA, PETG', requiredByEbay: false, locked: true },
+      { name: 'Material', value: 'PLA; PETG', requiredByEbay: false, locked: true },
     ])
   })
 
-  it('quotes a value that carries a comma, so the round trip keeps it whole', () => {
+  it('leaves a German decimal comma alone — it is not a separator', () => {
+    // Found live: typing "0,16 mm" into a box stored ["0", "16 mm"]. Values are
+    // separated by semicolons for exactly this reason, so no quoting is needed
+    // for the case German sellers hit constantly.
     const rows = aspectRows({ 'Höhe': ['1,5 cm'] }, [], 0)
-    expect(rows[0]!.value).toBe('"1,5 cm"')
+    expect(rows[0]!.value).toBe('1,5 cm')
   })
 
   it('shows an aspect eBay requires even when it has no value yet', () => {
@@ -71,7 +74,7 @@ describe('parseAspectFields', () => {
       aspectName0: 'Marke',
       aspectValue0: 'Markenlos',
       aspectName1: 'Material',
-      aspectValue1: 'PLA, PETG',
+      aspectValue1: 'PLA; PETG',
     })
     expect(parsed.present).toBe(true)
     expect(parsed.errors).toEqual([])
@@ -169,9 +172,28 @@ describe('value quoting (moved here with the helpers from aspect-text.ts)', () =
   })
 
   it('leaves an ordinary value unquoted and handles the empty case', () => {
-    expect(formatValues(['PLA', 'PETG'])).toBe('PLA, PETG')
+    expect(formatValues(['PLA', 'PETG'])).toBe('PLA; PETG')
     expect(formatValues([])).toBe('')
     expect(splitValues('')).toEqual([])
-    expect(splitValues('  ,  ')).toEqual([])
+    expect(splitValues('  ;  ')).toEqual([])
+    // A lone comma is now a literal character, not an empty separator.
+    expect(splitValues('0,16 mm')).toEqual(['0,16 mm'])
+  })
+})
+
+describe('discarded blank boxes leave gaps in the indices', () => {
+  it('parses what arrives, whatever numbers are missing', () => {
+    // Removing an empty box client-side simply stops its fields being posted.
+    // Nothing renumbers, so the server sees 0, 3, 7 — and must not care.
+    const parsed = parseAspectFields({
+      aspectName0: 'Marke',
+      aspectValue0: 'Markenlos',
+      aspectName3: 'Material',
+      aspectValue3: 'PETG',
+      aspectName7: 'Farbe',
+      aspectValue7: 'Schwarz',
+    })
+    expect(parsed.errors).toEqual([])
+    expect(parsed.aspects).toEqual({ Marke: ['Markenlos'], Material: ['PETG'], Farbe: ['Schwarz'] })
   })
 })

@@ -27,22 +27,31 @@
  */
 
 /**
- * One value, quoted when it would otherwise not survive the round trip.
+ * Values inside one box are separated by a SEMICOLON, not a comma.
  *
- * eBay values legitimately carry commas — "Höhe 1,5 cm", "Rot, matt" — and the
- * comma is what separates values inside one box, so an unquoted one came back
- * as two. A bare double quote needs the same treatment for the opposite
- * reason: read back, it acts as a quoting toggle, which silently swallowed the
- * character and the next separator (an inch mark, `5" Zoll`). The quote itself
- * is escaped by doubling, CSV-style.
+ * German values carry decimal commas constantly — "0,16 mm", "Höhe 1,5 cm" —
+ * and with a comma separator every one of them silently became two values the
+ * moment it was typed. (Stored values were quoted on render and survived, so
+ * the corruption only hit freshly typed text: the worst kind, because the
+ * seller watched it happen and saw nothing.) The variant editor picked
+ * semicolons for exactly this reason and this box now matches it.
+ *
+ * A value containing a semicolon or a quote is still quoted; the quote itself
+ * is escaped by doubling, CSV-style. A bare quote must be quoted too, or it
+ * acts as a quoting toggle when read back and swallows the next separator
+ * (an inch mark, `5" Zoll`).
  */
+export const VALUE_SEPARATOR = ';'
+
 function formatValue(value: string): string {
-  return value.includes(',') || value.includes('"') ? `"${value.replace(/"/g, '""')}"` : value
+  return value.includes(VALUE_SEPARATOR) || value.includes('"')
+    ? `"${value.replace(/"/g, '""')}"`
+    : value
 }
 
 /** One aspect's values as the single string its input box holds. */
 export function formatValues(values: string[]): string {
-  return values.map(formatValue).join(', ')
+  return values.map(formatValue).join('; ')
 }
 
 /** Splits a box back into values, honouring the quoting `formatValue` applies. */
@@ -61,7 +70,7 @@ export function splitValues(input: string): string[] {
       } else {
         inQuotes = !inQuotes
       }
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === VALUE_SEPARATOR && !inQuotes) {
       out.push(current)
       current = ''
     } else {

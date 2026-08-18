@@ -7,7 +7,7 @@ import type { Finding } from '../commands/preflight.js'
 import { gate } from '../makerworld/license.js'
 import { coverage } from '../seo/coverage.js'
 import { changedMarketplaces, diffCopy } from '../proposal.js'
-import { aspectRows } from './aspect-fields.js'
+import { aspectRows, type AspectRow } from './aspect-fields.js'
 import { formatVariants } from './variant-text.js'
 import { assessPrice, isMixed } from '../seo/price.js'
 import type { PriceBand } from '../seo/types.js'
@@ -923,42 +923,62 @@ function publishCard(listing: ListingRecord, perMarket: Record<Marketplace, numb
 function aspectBoxes(listing: ListingRecord, requiredAspects: string[] | undefined): string {
   const rows = aspectRows(listing.copy.ebay.aspects, requiredAspects ?? [])
 
-  const boxes = rows
-    .map((row, index) => {
-      const id = `aspect-v-${index}`
-      const badge = row.requiredByEbay ? '<span class="req-tag">Pflicht bei eBay</span>' : ''
-      // A named row carries its name in a hidden field; only a blank row lets
-      // the seller type one, because renaming an aspect in place is
-      // indistinguishable from deleting one and adding another.
-      // `aspectHint` says "we labelled this box and left it empty" — the
-      // reminder for a required aspect. Without it the server would read an
-      // untouched reminder as a half-entered aspect and refuse every save.
-      const hint = row.name && !row.locked ? `<input type="hidden" name="aspectHint${index}" value="1">` : ''
-      const nameField = row.name
-        ? `<div class="aspect-top"><label for="${id}">${esc(row.name)}</label>${badge}</div>
-           <input type="hidden" name="aspectName${index}" value="${esc(row.name)}">${hint}`
-        : `<div class="aspect-top"><label for="${id}">Neues Merkmal</label></div>
-           <input class="field aspect-name" name="aspectName${index}" value=""
-                  placeholder="Name, z. B. Material" autocomplete="off">`
-      const remove = row.locked
-        ? `<label class="aspect-rm"><input type="checkbox" name="aspectDrop${index}" value="1"> entfernen</label>`
-        : ''
-      return `<div class="aspect${row.requiredByEbay ? ' req' : ''}${row.name ? '' : ' blank'}">
-        ${nameField}
-        <input class="field" id="${id}" name="aspectValue${index}" value="${esc(row.value)}"
-               placeholder="${row.name ? 'Wert' : 'Wert, z. B. PETG'}" autocomplete="off"${
-                 row.locked ? ' required' : ''
-               }>
-        ${remove}
-      </div>`
-    })
-    .join('')
+  const boxes = rows.map((row, index) => (row.name ? namedBox(row, index) : blankBox(index))).join('')
 
+  // The template is what "+ Merkmal" clones. Cloning the last visible blank box
+  // instead — as this first did — breaks the moment the seller removes them
+  // all: there would be nothing left to copy.
   return `<div class="aspects" id="aspects">${boxes}</div>
+    <template id="aspect-blank">${blankBox(0)}</template>
     <div class="actions"><button class="btn ghost" type="button" id="aspect-add">+ Merkmal</button></div>
     <p class="note">Jedes gefüllte Feld muss gefüllt bleiben — leeren geht nicht, entfernen nur über den
-      Haken. Mehrere Werte mit Komma trennen; ein Wert, der selbst ein Komma enthält, gehört in
-      <code>"Anführungszeichen"</code>.</p>`
+      Haken. Eine neue, noch leere Box wirfst du mit ✕ wieder weg. Mehrere Werte trennst du mit
+      <strong>Semikolon</strong> (<code>PLA; PETG</code>) — Kommas bleiben Kommas, damit
+      <code>0,16 mm</code> ein Wert bleibt.</p>`
+}
+
+/** A box for an aspect that already has its name: eBay's, or one saved earlier. */
+function namedBox(row: AspectRow, index: number): string {
+  const id = `aspect-v-${index}`
+  const badge = row.requiredByEbay ? '<span class="req-tag">Pflicht bei eBay</span>' : ''
+  // `aspectHint` says "we labelled this box and left it empty" — the reminder
+  // for a required aspect. Without it the server would read an untouched
+  // reminder as a half-entered aspect and refuse every save.
+  const hint = row.locked ? '' : `<input type="hidden" name="aspectHint${index}" value="1">`
+  // Removing a saved value goes through the checkbox and the server: it is
+  // stored data, so the act has to be deliberate and reviewable. A blank box
+  // is neither, which is why ✕ there is a plain client-side discard.
+  const remove = row.locked
+    ? `<label class="aspect-rm"><input type="checkbox" name="aspectDrop${index}" value="1"> entfernen</label>`
+    : ''
+  return `<div class="aspect${row.requiredByEbay ? ' req' : ''}">
+    <div class="aspect-top"><label for="${id}">${esc(row.name)}</label>${badge}</div>
+    <input type="hidden" name="aspectName${index}" value="${esc(row.name)}">${hint}
+    <input class="field" id="${id}" name="aspectValue${index}" value="${esc(row.value)}"
+           placeholder="Wert" autocomplete="off"${row.locked ? ' required' : ''}>
+    ${remove}
+  </div>`
+}
+
+/**
+ * An empty box for an aspect the seller names themselves.
+ *
+ * Also the body of the `<template>`, so the box the button adds and the boxes
+ * rendered here cannot drift apart. The index is rewritten on clone.
+ */
+function blankBox(index: number): string {
+  const id = `aspect-v-${index}`
+  return `<div class="aspect blank">
+    <div class="aspect-top">
+      <label for="${id}">Neues Merkmal</label>
+      <button class="aspect-x" type="button" title="Diese leere Box entfernen"
+              aria-label="Diese leere Box entfernen">✕</button>
+    </div>
+    <input class="field aspect-name" name="aspectName${index}" value=""
+           placeholder="Name, z. B. Material" autocomplete="off">
+    <input class="field" id="${id}" name="aspectValue${index}" value=""
+           placeholder="Wert, z. B. 0,16 mm" autocomplete="off">
+  </div>`
 }
 
 export function listingDetail({
