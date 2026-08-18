@@ -1,4 +1,4 @@
-import { gate } from '../sources/makerworld/license.js'
+import { gate } from '../sources/license.js'
 import { composeListingCopy } from '../ai/composer.js'
 import { researchKeywords } from '../seo/research.js'
 import { coverage, tagHygiene } from '../seo/coverage.js'

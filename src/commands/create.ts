@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { fetchModel, readModelFromFile } from '../sources/makerworld/fetcher.js'
-import { gate } from '../sources/makerworld/license.js'
+import { gate } from '../sources/license.js'
 import { composeListingCopy } from '../ai/composer.js'
 import { stageImages, looksLikeSourceDownload } from '../images.js'
 import { ListingRecordSchema, ProductInputSchema, type ListingRecord, type ProductInput } from '../types.js'

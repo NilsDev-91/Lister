@@ -1,4 +1,4 @@
-import { gate } from '../sources/makerworld/license.js'
+import { gate } from '../sources/license.js'
 import { proposeTitleOptions } from '../ai/composer.js'
 import { get, upsert } from '../store/db.js'
 import { UserError } from '../util/log.js'

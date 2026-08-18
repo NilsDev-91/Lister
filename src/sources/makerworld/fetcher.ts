@@ -1,7 +1,7 @@
 import { parse as parseHtml, type HTMLElement } from 'node-html-parser'
 import { UserError, log } from '../../util/log.js'
 import { request } from '../../util/http.js'
-import { normaliseLicense } from './license.js'
+import { normaliseLicense } from '../license.js'
 import { SourceModelSchema, type SourceImage, type SourceModel } from '../../types.js'
 
 /**
@@ -405,7 +405,7 @@ export function parseModelHtml(html: string, inputUrl: string): SourceModel {
   }
 
   const licenseRaw = extracted.license ?? licenseFromText(html) ?? ''
-  const license = normaliseLicense(licenseRaw)
+  const license = normaliseLicense(licenseRaw, 'MAKERWORLD')
 
   const model: SourceModel = {
     sourceUrl: normalised,

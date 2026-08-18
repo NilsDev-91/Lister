@@ -1,7 +1,7 @@
-import type { CommercialUse, LicenseInfo } from '../../types.js'
+import type { CommercialUse, LicenseInfo, Platform } from '../types.js'
 
 /**
- * Licence normalisation for MakerWorld models.
+ * Licence normalisation for source-platform models.
  *
  * Two things are being decided here, and they are not the same question:
  *
@@ -28,6 +28,12 @@ interface CcFlags {
   noDerivatives: boolean
 }
 
+interface LicenseEntry {
+  code: string
+  commercial: CommercialUse
+  note: string
+}
+
 /**
  * MakerWorld's own licence enumeration, taken from the values that appear
  * literally in `design.license`.
@@ -36,7 +42,7 @@ interface CcFlags {
  * `CC BY-NC` — so exact matching has to come before any "CC"-anchored regex,
  * which would otherwise miss every one of them.
  */
-const MAKERWORLD_LICENSES: Record<string, { code: string; commercial: CommercialUse; note: string }> = {
+const MAKERWORLD_LICENSES: Record<string, LicenseEntry> = {
   cc0: { code: 'CC0-1.0', commercial: 'yes', note: 'Public domain: commercial use is permitted and no attribution is required.' },
   by: { code: 'CC-BY-4.0', commercial: 'yes', note: 'Attribution required.' },
   'by-sa': { code: 'CC-BY-SA-4.0', commercial: 'yes', note: 'Attribution required. ShareAlike governs derivative models, not the sale of a print.' },
@@ -64,6 +70,23 @@ const MAKERWORLD_LICENSES: Record<string, { code: string; commercial: Commercial
     commercial: 'no',
     note: 'The MakerWorld Exclusive License does not permit selling prints elsewhere.',
   },
+}
+
+/**
+ * Each platform speaks its own licence vocabulary, so the exact-match lookup
+ * is per platform: MakerWorld's bare `BY-NC` must not be assumed to mean the
+ * same thing when a different platform emits it — an unrecognised value routes
+ * to `unknown`, which prompts the user instead of silently deciding.
+ *
+ * Entries are added only once they have been verified against a real API
+ * response from that platform (see the adapters' fixtures). Until then a
+ * platform's table is empty and everything it emits outside the universal
+ * Creative Commons spellings resolves to `unknown` — the safe direction.
+ */
+const PLATFORM_LICENSES: Record<Platform, Record<string, LicenseEntry>> = {
+  MAKERWORLD: MAKERWORLD_LICENSES,
+  CULTS3D: {},
+  PRINTABLES: {},
 }
 
 /** Matches the abbreviation form and captures whatever follows "BY". */
@@ -114,7 +137,14 @@ function ccCode(flags: CcFlags): string {
   return `${parts.join('-')}-4.0`
 }
 
-export function normaliseLicense(raw: string): LicenseInfo {
+/**
+ * `platform` is deliberately required, not defaulted. With a MakerWorld
+ * default, an adapter that forgets the argument silently inherits MakerWorld's
+ * table — and its bare `BY` entry would turn an unrelated platform's licence
+ * string into a silent commercial-yes. Requiring it makes that mistake a
+ * compile error instead.
+ */
+export function normaliseLicense(raw: string, platform: Platform): LicenseInfo {
   const text = raw.trim()
 
   if (!text) {
@@ -126,12 +156,14 @@ export function normaliseLicense(raw: string): LicenseInfo {
     }
   }
 
-  // Exact match against MakerWorld's own vocabulary first. Its Creative
-  // Commons values are bare ("BY-NC"), which no CC-anchored regex would catch.
-  // `hasOwn` guard: the licence string comes off a web page, and a value like
-  // "constructor" would otherwise hit Object.prototype and return a function.
+  // Exact match against the platform's own vocabulary first. MakerWorld's
+  // Creative Commons values are bare ("BY-NC"), which no CC-anchored regex
+  // would catch. `hasOwn` guard: the licence string comes off a web page, and
+  // a value like "constructor" would otherwise hit Object.prototype and
+  // return a function.
+  const table = PLATFORM_LICENSES[platform]
   const key = text.toLowerCase()
-  const exact = Object.hasOwn(MAKERWORLD_LICENSES, key) ? MAKERWORLD_LICENSES[key] : undefined
+  const exact = Object.hasOwn(table, key) ? table[key] : undefined
   if (exact) {
     const attribution =
       exact.commercial === 'yes' && exact.code !== 'CC0-1.0'

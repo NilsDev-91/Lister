@@ -11,8 +11,8 @@ import {
   type SourceModel,
   type ProductInput,
 } from '../types.js'
-import { requiresAttribution } from '../sources/makerworld/license.js'
-import type { LicenseGateDecision } from '../sources/makerworld/license.js'
+import { requiresAttribution } from '../sources/license.js'
+import type { LicenseGateDecision } from '../sources/license.js'
 import type { KeywordEvidence, SeoEvidence } from '../seo/types.js'
 
 /**
