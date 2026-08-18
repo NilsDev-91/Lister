@@ -309,14 +309,17 @@ export function newListingForm(error?: string, settings: Settings = DEFAULT_SETT
         <div>
           <div class="card">
             <h3>Modell</h3>
-            <label for="url">MakerWorld-URL</label>
+            <label for="url">Modell-URL (MakerWorld oder Cults3D)</label>
             <input class="field" id="url" name="url" required
-                   placeholder="https://makerworld.com/de/models/…">
-            <div class="gap"></div>
-            <label for="page">Gespeicherte Seite (HTML)</label>
-            <input class="field" id="page" name="page" type="file" accept=".html,.htm">
-            <p class="note">MakerWorld blockiert direkte Abrufe über Cloudflare.
-               Seite im Browser mit Strg+S sichern und hier hochladen — das ist der verlässliche Weg.</p>
+                   placeholder="https://makerworld.com/de/models/… oder https://cults3d.com/de/modell-3d/…">
+            <div id="page-field">
+              <div class="gap"></div>
+              <label for="page">Gespeicherte Seite (HTML) — nur für MakerWorld</label>
+              <input class="field" id="page" name="page" type="file" accept=".html,.htm">
+              <p class="note">MakerWorld blockiert direkte Abrufe über Cloudflare.
+                 Seite im Browser mit Strg+S sichern und hier hochladen — das ist der verlässliche Weg.
+                 Cults3D wird über die API gelesen und braucht keine Datei.</p>
+            </div>
           </div>
 
           <div class="card">
@@ -352,7 +355,7 @@ export function newListingForm(error?: string, settings: Settings = DEFAULT_SETT
           <div class="card">
             <h3>Rechte</h3>
             <label style="display:flex; gap:.5rem; align-items:flex-start; color:var(--ink)">
-              <input type="checkbox" name="commercialRights" value="1" style="margin-top:.25rem">
+              <input type="checkbox" name="commercialRights" value="1" checked style="margin-top:.25rem">
               <span>Ich habe eine kommerzielle Lizenz, die die Seite nicht zeigt</span>
             </label>
             <p class="note">Deckt das Modell — nicht die Fotos des Designers.
@@ -779,13 +782,29 @@ function sourceImageReference(listing: ListingRecord): string {
 function originCard(listing: ListingRecord): string {
   const licence = listing.source.license
   const permits = licence.commercialUse === 'yes'
+  // Whether the page's own licence covers the designer's media too. The CC
+  // family does; a sale-only licence (Cults3D's CU) covers the prints and
+  // nothing else — there the images claim must be makeable WITHOUT the
+  // override, or the rule in gate() would be unreachable from the UI.
+  const mediaCovered = permits && gate(licence, false, false).mayReuseImages
 
   // Two claims, two boxes. Bundling them into one would be the easy thing and
   // the wrong one: the ordinary commercial membership covers the model and not
   // the creator's photographs, so a seller who ticks "I may sell this" must not
   // silently also be saying "and I may use their pictures".
   const licenceBoxes = permits
-    ? ''
+    ? mediaCovered
+      ? ''
+      : `<label class="check-line" style="align-items:flex-start; gap:.5rem">
+           <input type="checkbox" name="imagesLicensed" value="1" ${listing.sourceImagesLicensed ? 'checked' : ''}
+                  style="margin-top:.25rem">
+           <span>Meine Vereinbarung deckt auch die Bilder des Designers ab</span>
+         </label>
+         <p class="note">Die Seitenlizenz (<strong>${esc(licence.raw || 'unbekannt')}</strong>) deckt den
+            Verkauf der Drucke, sagt aber nichts über die Fotos und die Beschreibung des Designers —
+            die bleiben dessen Eigentum. Nur ankreuzen, wenn deine Vereinbarung sie ausdrücklich
+            einschließt. Wirkt auf eBay-Bilder — Etsy nimmt grundsätzlich nur deine eigenen Fotos.</p>
+         <div class="gap"></div>`
     : `<label class="check-line" style="align-items:flex-start; gap:.5rem">
            <input type="checkbox" name="overridden" value="1" ${listing.licenseOverridden ? 'checked' : ''}
                   style="margin-top:.25rem">

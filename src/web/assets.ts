@@ -519,6 +519,24 @@ for (const form of document.querySelectorAll('[data-confirm]')) {
   });
 }
 
+// The saved-page upload exists for MakerWorld alone — every other platform is
+// read through its API. The field hides as soon as the pasted URL names a
+// different host, so the form does not ask for a file the run would reject.
+// Shown while the field is empty or unrecognised: the server has the final
+// word either way, this only keeps the form honest.
+const createUrl = document.getElementById('url');
+const pageField = document.getElementById('page-field');
+if (createUrl && pageField) {
+  const paint = () => {
+    let host = '';
+    try { host = new URL(createUrl.value.trim()).hostname; } catch {}
+    const isMakerWorld = /(^|\.)makerworld\.com$/i.test(host);
+    pageField.hidden = Boolean(host) && !isMakerWorld;
+  };
+  createUrl.addEventListener('input', paint);
+  paint();
+}
+
 // Submitting is not instant — the saved page has to upload before the server
 // can even answer. Without this the button looks unpressed and gets pressed
 // again, which on the create form means a second listing.

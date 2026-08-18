@@ -14,6 +14,13 @@
       "runtimeArgs": ["tsx", "src/cli.ts", "ui", "--no-open", "-p", "4323"],
       "port": 4323,
       "autoPort": false
+    },
+    {
+      "name": "lister-ui-4324",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "src/cli.ts", "ui", "--no-open", "-p", "4324"],
+      "port": 4324,
+      "autoPort": false
     }
   ]
 }

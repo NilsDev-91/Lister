@@ -558,10 +558,13 @@ async function handleListingAction(
     // so reading it as "leave unchanged" would make the claim impossible to
     // withdraw — and a rights assertion has to be revocable.
     const overridden = fields['overridden'] === '1'
-    // The image claim cannot outlive the sale claim it depends on: pictures are
-    // not licensed for a sale that is not.
-    const imagesLicensed = overridden && fields['imagesLicensed'] === '1'
     const current = get(id) ?? listing
+    // The image claim cannot outlive the sale claim it depends on: pictures are
+    // not licensed for a sale that is not. The sale claim is either the page's
+    // own licence (a sale-only licence like Cults3D's CU shows only this box)
+    // or the seller's override.
+    const salePermitted = current.source.license.commercialUse === 'yes' || overridden
+    const imagesLicensed = salePermitted && fields['imagesLicensed'] === '1'
 
     // The Etsy risk claim keeps its original timestamp: it records when the
     // decision was made, and re-saving the form is not a new decision.
@@ -613,6 +616,10 @@ async function handleListingAction(
       )
     } else if (current.licenseOverridden) {
       said.push('Rechte-Angabe zurückgenommen. Veröffentlichen ist wieder gesperrt.')
+    } else if (imagesLicensed && !current.sourceImagesLicensed) {
+      said.push('Bilder des Designers als mitlizenziert markiert — sie lassen sich jetzt übernehmen.')
+    } else if (!imagesLicensed && current.sourceImagesLicensed) {
+      said.push('Bild-Angabe zurückgenommen — die Bilder des Designers sind wieder gesperrt.')
     }
     if (riskChecked && !current.ownDesign && !current.etsyDesignRiskAccepted) {
       said.push('Etsy-Eigendesign-Risiko übernommen — protokolliert mit Zeitpunkt und Quelle.')
@@ -646,7 +653,7 @@ async function handleListingAction(
       },
       {
         label: 'Bilder werden übernommen',
-        hint: 'Sie werden von MakerWorld geladen und, wenn eBay verbunden ist, dort gehostet.',
+        hint: 'Sie werden von der Modellseite geladen und, wenn eBay verbunden ist, dort gehostet.',
       },
     )
     redirect(res, `/progress/${encodeURIComponent(job.id)}`)

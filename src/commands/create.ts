@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { fetchModel, readModelFromFile } from '../sources/makerworld/fetcher.js'
+import { fetchModel, readModelFromFile } from '../sources/router.js'
 import { gate } from '../sources/license.js'
 import { composeListingCopy } from '../ai/composer.js'
 import { stageImages, looksLikeSourceDownload } from '../images.js'
-import { ListingRecordSchema, ProductInputSchema, type ListingRecord, type ProductInput } from '../types.js'
+import {
+  ListingRecordSchema,
+  ProductInputSchema,
+  type ListingRecord,
+  type Platform,
+  type ProductInput,
+} from '../types.js'
 import { upsert, findBySourceUrl } from '../store/db.js'
 import { UserError } from '../util/log.js'
 import { terminalIo, type Io } from '../util/io.js'
@@ -54,8 +60,21 @@ function parseDimensions(input: string | undefined): ProductInput['dimensionsMm'
 }
 
 /**
- * Builds a draft listing from a MakerWorld URL: read the page, apply the licence
- * gate, generate copy, stage images, and persist. Nothing is sent to a
+ * The local id doubles as the eBay SKU fallback, so it has to survive the SKU
+ * rules: ≤50 characters from `A-Za-z0-9._-`. MakerWorld ids are short numbers;
+ * Cults3D slugs are free-length strings that may carry characters the SKU
+ * alphabet refuses, hence the clamp and the sweep.
+ */
+const ID_PREFIX: Record<Platform, string> = { MAKERWORLD: 'mw', CULTS3D: 'c3d', PRINTABLES: 'prn' }
+
+function listingId(platform: Platform, externalId: string): string {
+  const skuSafe = externalId.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 36)
+  return `${ID_PREFIX[platform]}-${skuSafe}-${randomUUID().slice(0, 6)}`
+}
+
+/**
+ * Builds a draft listing from a model URL: read the page or API, apply the
+ * licence gate, generate copy, stage images, and persist. Nothing is sent to a
  * marketplace here — that is `lister publish`, which is where money changes hands.
  */
 export async function createCommand(options: CreateOptions): Promise<ListingRecord> {
@@ -161,7 +180,7 @@ export async function createCommand(options: CreateOptions): Promise<ListingReco
   io.detail(`Etsy tags: ${copy.etsy.tags.join(', ')}`)
 
   // ---- Images -------------------------------------------------------------
-  const id = `mw-${model.externalId}-${randomUUID().slice(0, 6)}`
+  const id = listingId(model.platform, model.externalId)
   io.step('Staging images…')
   const images = await stageImages({
     listingId: id,
