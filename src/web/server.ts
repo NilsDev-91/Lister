@@ -11,6 +11,7 @@ import { imageDirFor } from '../util/paths.js'
 import { downloadImages } from '../images.js'
 import { gate } from '../makerworld/license.js'
 import * as ebayAuth from '../marketplaces/ebay/auth.js'
+import { getAspectSpecs } from '../marketplaces/ebay/client.js'
 import { EbayCopySchema, EbaySkuSchema, EtsyCopySchema, type ListingRecord, type Marketplace } from '../types.js'
 import { auditContent, auditEbayAspects, Report } from '../commands/preflight.js'
 import { createCommand } from '../commands/create.js'
@@ -34,7 +35,7 @@ import {
 } from './views.js'
 import { startJob, getJob } from './jobs.js'
 import { appStatus } from '../status.js'
-import { parseAspects } from './aspect-text.js'
+import { parseAspectFields } from './aspect-fields.js'
 import { parseVariants } from './variant-text.js'
 import { loadSettings, saveSettings, SettingsSchema } from '../settings.js'
 
@@ -234,6 +235,7 @@ async function handle(
           ebay: ebayOnly.blockers.length,
           etsy: auditContent(listing, ['etsy']).blockers.length,
         },
+        ...(await requiredAspectNames(listing)),
       }),
     )
     return
@@ -277,6 +279,27 @@ async function handle(
  * Failures are swallowed on purpose — a taxonomy outage must not take out the
  * page that shows everything else about the listing.
  */
+/**
+ * The aspect names eBay marks required for the resolved category.
+ *
+ * Feeds the editor, which shows a box for every required aspect even when it
+ * has no value yet — a required specific nobody can see is one that gets
+ * forgotten, and a missing one removes the listing from the filter entirely.
+ *
+ * Returns an empty object rather than throwing: this is a label, and a
+ * taxonomy outage must not take out the page. The specs come from the same
+ * 7-day cache the preflight above just used, so this costs no second call.
+ */
+async function requiredAspectNames(listing: ListingRecord): Promise<{ requiredAspects?: string[] }> {
+  if (!listing.ebayCategoryId) return {}
+  try {
+    const { specs } = await getAspectSpecs(listing.ebayCategoryId)
+    return { requiredAspects: specs.filter((s) => s.required).map((s) => s.name) }
+  } catch {
+    return {}
+  }
+}
+
 async function addAspectFindings(listing: ListingRecord, report: Report): Promise<void> {
   if (!listing.ebayCategoryId) return
   try {
@@ -432,11 +455,15 @@ async function handleListingAction(
 
   // --- save edited copy ----------------------------------------------------
   if (action === '') {
+    // A submission that carries no aspect fields at all says nothing about
+    // them — a page from before this editor existed, or a hand-built request.
+    // Keeping what is stored is the only reading that cannot delete data.
+    const parsedAspects = parseAspectFields(fields)
     const ebay = EbayCopySchema.safeParse({
       ...listing.copy.ebay,
       title: fields['ebayTitle'] ?? '',
       descriptionHtml: fields['ebayDesc'] ?? '',
-      aspects: parseAspects(fields['ebayAspects'] ?? ''),
+      aspects: parsedAspects.present ? parsedAspects.aspects : listing.copy.ebay.aspects,
     })
     const etsy = EtsyCopySchema.safeParse({
       ...listing.copy.etsy,
@@ -455,12 +482,19 @@ async function handleListingAction(
 
     // Validate with the same schemas the CLI uses, so the UI cannot smuggle in
     // copy that a marketplace would reject.
-    if (!ebay.success || !etsy.success || (sku && !sku.success) || parsedVariants.errors.length) {
+    if (
+      !ebay.success ||
+      !etsy.success ||
+      (sku && !sku.success) ||
+      parsedVariants.errors.length ||
+      parsedAspects.errors.length
+    ) {
       const issues = [
         ...(ebay.success ? [] : ebay.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)),
         ...(etsy.success ? [] : etsy.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)),
         ...(sku && !sku.success ? sku.error.issues.map((i) => `SKU: ${i.message}`) : []),
         ...parsedVariants.errors.map((e) => `Varianten: ${e}`),
+        ...parsedAspects.errors.map((e) => `Merkmale: ${e}`),
       ].join(' · ')
       redirect(res, flashUrl(backTo, 'bad', `Nicht gespeichert — ${issues}`))
       return

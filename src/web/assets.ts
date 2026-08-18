@@ -128,6 +128,30 @@ textarea { min-height:8rem; resize:vertical; line-height:1.5; }
   padding:.15rem .45rem; font-size:.78rem; color:#dcd2c2;
 }
 
+/* --- item specifics ----------------------------------------------------- */
+.aspects { display:grid; grid-template-columns:repeat(auto-fill,minmax(12.5rem,1fr)); gap:.55rem; }
+.aspect {
+  border:1px solid var(--line); border-left:2px solid var(--line); border-radius:5px;
+  padding:.45rem .55rem .5rem; background:var(--sunk);
+}
+/* Required by eBay: an accent edge, because a missing one is exclusion from
+   the filter rather than a lower rank. */
+.aspect.req { border-left-color:var(--accent); }
+.aspect.blank { border-style:dashed; background:transparent; }
+.aspect-top { display:flex; align-items:baseline; justify-content:space-between; gap:.4rem; margin-bottom:.25rem; }
+.aspect-top label { margin:0; color:var(--ink); font-size:.78rem; font-weight:600; }
+.req-tag { font-size:.63rem; color:var(--accent); white-space:nowrap; letter-spacing:.02em; }
+.aspect .field { padding:.38rem .5rem; font-size:.85rem; }
+.aspect .aspect-name { margin-bottom:.3rem; }
+.aspect .field:invalid { border-color:var(--bad); }
+.aspect-rm {
+  display:flex; gap:.3rem; align-items:center; margin:.35rem 0 0;
+  font-size:.7rem; color:var(--dim); cursor:pointer;
+}
+.aspect-rm input { cursor:pointer; }
+.aspect.dropping { opacity:.45; }
+.aspect.dropping .field { text-decoration:line-through; }
+
 /* --- images ------------------------------------------------------------- */
 .imgs { display:grid; grid-template-columns:repeat(auto-fill,minmax(7rem,1fr)); gap:.5rem; }
 .img {
@@ -419,6 +443,58 @@ if (market) {
   };
   market.addEventListener('change', paint);
   paint();
+}
+
+// Item specifics: one box per aspect, and the box defends its own value.
+//
+// A filled field is marked required, so the browser refuses to submit it empty
+// — clearing one used to be a keystroke in a shared textarea and was invisible
+// until a publish came back short. The three behaviours below are what make
+// that liveable: the tick releases the requirement (removing is a decision),
+// naming a blank row arms it (a name without a value is a half-entered aspect,
+// not an edit), and the button adds another blank row.
+const aspects = document.getElementById('aspects');
+if (aspects) {
+  aspects.addEventListener('change', (e) => {
+    if (e.target.type !== 'checkbox') return;
+    const box = e.target.closest('.aspect');
+    if (!box) return;
+    const value = box.querySelector('input[name^="aspectValue"]');
+    if (value) value.required = !e.target.checked;
+    box.classList.toggle('dropping', e.target.checked);
+  });
+
+  aspects.addEventListener('input', (e) => {
+    if (!e.target.classList.contains('aspect-name')) return;
+    const box = e.target.closest('.aspect');
+    const value = box && box.querySelector('input[name^="aspectValue"]');
+    if (value) value.required = e.target.value.trim().length > 0;
+  });
+
+  const add = document.getElementById('aspect-add');
+  if (add) {
+    add.addEventListener('click', () => {
+      const blanks = aspects.querySelectorAll('.aspect.blank');
+      const template = blanks[blanks.length - 1];
+      if (!template) return;
+      // Cloned rather than built from markup: the template is already the
+      // shape the server parses, so the two cannot drift.
+      const row = template.cloneNode(true);
+      const index = aspects.children.length;
+      const name = row.querySelector('input[name^="aspectName"]');
+      const value = row.querySelector('input[name^="aspectValue"]');
+      const label = row.querySelector('label');
+      name.name = 'aspectName' + index;
+      name.value = '';
+      value.name = 'aspectValue' + index;
+      value.value = '';
+      value.id = 'aspect-v-' + index;
+      value.required = false;
+      if (label) label.setAttribute('for', value.id);
+      aspects.appendChild(row);
+      name.focus();
+    });
+  }
 }
 
 // Anything that costs money asks first, with the amount in the question.

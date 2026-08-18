@@ -7,7 +7,7 @@ import type { Finding } from '../commands/preflight.js'
 import { gate } from '../makerworld/license.js'
 import { coverage } from '../seo/coverage.js'
 import { changedMarketplaces, diffCopy } from '../proposal.js'
-import { formatAspects } from './aspect-text.js'
+import { aspectRows } from './aspect-fields.js'
 import { formatVariants } from './variant-text.js'
 import { assessPrice, isMixed } from '../seo/price.js'
 import type { PriceBand } from '../seo/types.js'
@@ -474,6 +474,14 @@ export interface DetailData {
    * agree with it.
    */
   blockersPerMarketplace?: Record<Marketplace, number>
+  /**
+   * Aspect names eBay marks required for the resolved category.
+   *
+   * Best effort: absent when no category is resolved yet or the taxonomy call
+   * failed. Used only to label and to offer an empty box for one that is
+   * missing — a required aspect nobody can see is one that gets forgotten.
+   */
+  requiredAspects?: string[]
 }
 
 /**
@@ -901,6 +909,58 @@ function publishCard(listing: ListingRecord, perMarket: Record<Marketplace, numb
   </div>`
 }
 
+/**
+ * One labelled box per item specific, instead of one textarea for all of them.
+ *
+ * The rules the markup enforces — see `aspect-fields.ts` for why:
+ *  - a box that has a value carries `required`, so it cannot be emptied by a
+ *    stray keystroke; removing it takes the explicit tick,
+ *  - an aspect eBay requires is always shown, even with no value yet, so it
+ *    cannot be forgotten,
+ *  - blank boxes at the end keep the one thing a generated form usually loses:
+ *    the ability to ADD an aspect the category demands.
+ */
+function aspectBoxes(listing: ListingRecord, requiredAspects: string[] | undefined): string {
+  const rows = aspectRows(listing.copy.ebay.aspects, requiredAspects ?? [])
+
+  const boxes = rows
+    .map((row, index) => {
+      const id = `aspect-v-${index}`
+      const badge = row.requiredByEbay ? '<span class="req-tag">Pflicht bei eBay</span>' : ''
+      // A named row carries its name in a hidden field; only a blank row lets
+      // the seller type one, because renaming an aspect in place is
+      // indistinguishable from deleting one and adding another.
+      // `aspectHint` says "we labelled this box and left it empty" — the
+      // reminder for a required aspect. Without it the server would read an
+      // untouched reminder as a half-entered aspect and refuse every save.
+      const hint = row.name && !row.locked ? `<input type="hidden" name="aspectHint${index}" value="1">` : ''
+      const nameField = row.name
+        ? `<div class="aspect-top"><label for="${id}">${esc(row.name)}</label>${badge}</div>
+           <input type="hidden" name="aspectName${index}" value="${esc(row.name)}">${hint}`
+        : `<div class="aspect-top"><label for="${id}">Neues Merkmal</label></div>
+           <input class="field aspect-name" name="aspectName${index}" value=""
+                  placeholder="Name, z. B. Material" autocomplete="off">`
+      const remove = row.locked
+        ? `<label class="aspect-rm"><input type="checkbox" name="aspectDrop${index}" value="1"> entfernen</label>`
+        : ''
+      return `<div class="aspect${row.requiredByEbay ? ' req' : ''}${row.name ? '' : ' blank'}">
+        ${nameField}
+        <input class="field" id="${id}" name="aspectValue${index}" value="${esc(row.value)}"
+               placeholder="${row.name ? 'Wert' : 'Wert, z. B. PETG'}" autocomplete="off"${
+                 row.locked ? ' required' : ''
+               }>
+        ${remove}
+      </div>`
+    })
+    .join('')
+
+  return `<div class="aspects" id="aspects">${boxes}</div>
+    <div class="actions"><button class="btn ghost" type="button" id="aspect-add">+ Merkmal</button></div>
+    <p class="note">Jedes gefüllte Feld muss gefüllt bleiben — leeren geht nicht, entfernen nur über den
+      Haken. Mehrere Werte mit Komma trennen; ein Wert, der selbst ein Komma enthält, gehört in
+      <code>"Anführungszeichen"</code>.</p>`
+}
+
 export function listingDetail({
   listing,
   findings,
@@ -908,6 +968,7 @@ export function listingDetail({
   flash,
   counts,
   blockersPerMarketplace,
+  requiredAspects,
 }: DetailData): string {
   const blockers = findings.filter((f) => f.severity === 'blocker')
   const warnings = findings.filter((f) => f.severity === 'warning')
@@ -978,10 +1039,8 @@ export function listingDetail({
             <label for="ebayDesc">Beschreibung (HTML)</label>
             <textarea id="ebayDesc" name="ebayDesc">${esc(listing.copy.ebay.descriptionHtml)}</textarea>
             <div class="gap"></div>
-            <label for="ebayAspects">Merkmale — je Zeile <code>Name: Wert, Wert</code></label>
-            <textarea id="ebayAspects" name="ebayAspects" style="min-height:8rem">${esc(
-              formatAspects(listing.copy.ebay.aspects),
-            )}</textarea>
+            <label>Merkmale</label>
+            ${aspectBoxes(listing, requiredAspects)}
             <p class="note">Der stärkste Ranking-Hebel bei eBay: Ein fehlendes Merkmal wirft dich komplett aus dem
               Filter, nicht nur weiter nach hinten. Ziel sind 10. Welche diese Kategorie kennt, zeigt
               <code>lister aspects ${esc(listing.id)}</code>.</p>

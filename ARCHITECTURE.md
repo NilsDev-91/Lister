@@ -150,7 +150,8 @@ src/
     views.ts assets.ts      SSR-HTML + CSS/JS (SECURITY_HEADERS: ⚠️ referrer!)
     security.ts             Origin+Token-Gate; SECURITY_HEADERS zentral
     multipart.ts            eigener Parser
-    aspect-text.ts          Merkmale ↔ Text (Komma-Quoting)
+    aspect-fields.ts        Merkmale ↔ Formularfelder (eine Box je Merkmal,
+                            Komma-Quoting je Wert); löst aspect-text.ts ab
     variant-text.ts         Varianten ↔ Text (SKU; Farbe; Preis; Menge)
 ```
 
@@ -164,6 +165,38 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-18 (2) — Merkmals-Editor: eine Box je Merkmal
+
+**Die Textarea ist abgelöst.** Die alte Begründung („eine generierte Zeile je
+Merkmal kann kein Merkmal HINZUFÜGEN, und genau das braucht ein fehlendes
+Pflichtmerkmal") galt — aber sie hat den teureren Fehler gedeckt: In einem
+gemeinsamen Textfeld löscht ein Tastendruck einen Wert oder eine ganze Zeile,
+und **nichts sagt es**, bis ein Publish zu kurz zurückkommt. Genau derselbe
+Text zerfiel außerdem an Anführungszeichen und Doppelpunkten (Nachtrag 1).
+
+`web/aspect-fields.ts` ist jetzt die einzige Wahrheit für beide Richtungen;
+`aspect-text.ts` ist gelöscht (die Quoting-Helfer sind mitgezogen, die
+Textarea-Funktionen waren danach toter Code). Die Regeln:
+
+- **Ein gefüllter Wert trägt `required`** — der Browser verweigert das
+  Absenden eines leergeräumten Felds („Fülle dieses Feld aus.", live geprüft).
+  Entfernen geht nur über den Haken „entfernen"; das ist eine Entscheidung,
+  kein Ausrutscher. JS nimmt das `required` beim Haken zurück.
+- **Ein von eBay verlangtes Merkmal bekommt immer eine Box**, auch ohne Wert
+  (`requiredAspectNames` in `server.ts`, aus dem 7-Tage-Spec-Cache, best
+  effort). Es ist bewusst **nicht** `required`: Sonst blockierte jede
+  Speicherung, bis es gefüllt ist — Preflight und Publish-Gate halten es
+  ohnehin auf. Solche Boxen tragen `aspectHint<i>`, damit der Server ein
+  leeres Erinnerungsfeld nicht als halb eingetipptes Merkmal ablehnt.
+  (Genau diese Falle hat der Test gefunden, bevor sie in die UI kam.)
+- **Ein Name ohne Wert ist ein Fehler, nie ein stiller Verlust** — die
+  Speicherung wird mit Meldung abgelehnt.
+- **Kommt ein POST ganz ohne Merkmalsfelder** (alte Seite, gebauter Request),
+  bleiben die gespeicherten Merkmale stehen. Schweigen ist kein Löschbefehl;
+  live gegengeprüft, alle 6 Merkmale überlebten.
+- Leere Boxen am Ende plus „+ Merkmal" erhalten das, was die Textarea konnte:
+  ein Merkmal hinzufügen, das die Kategorie verlangt.
 
 ## Nachtrag 2026-08-18 — Analyse-Runde (6-Dimensionen-Review + Funktionstest)
 
@@ -350,7 +383,9 @@ Multipart) fiel dem Abbruch zum Opfer — bei Gelegenheit nachholen.
   („Kabellänge" bekam die Artikellänge — jetzt Wortgrenzen); der
   Prozess-Memo über dem 7-Tage-Cache lief nie ab (jetzt 1 h TTL).
 - **Merkmals-Editor:** Werte mit Komma („Höhe 1,5 cm") zerfielen im
-  Roundtrip — jetzt CSV-artiges Quoting in `formatAspects`/`parseAspects`.
+  Roundtrip — jetzt CSV-artiges Quoting je Wert (die Funktionen hießen damals
+  `formatAspects`/`parseAspects`; seit 18.08. `formatValues`/`splitValues` in
+  `aspect-fields.ts`).
 - **`tagText` (Trading-API):** XML-Entities werden jetzt dekodiert — eine
   escapte `FullURL` mit `&amp;` landete vorher korrupt in `imageUrls`.
 - **Web-UI:** Lost-Update behoben (vor jedem `upsert` frisch lesen — der
