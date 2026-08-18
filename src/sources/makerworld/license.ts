@@ -1,4 +1,4 @@
-import type { CommercialUse, LicenseInfo } from '../types.js'
+import type { CommercialUse, LicenseInfo } from '../../types.js'
 
 /**
  * Licence normalisation for MakerWorld models.

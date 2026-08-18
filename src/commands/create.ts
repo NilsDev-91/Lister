@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { fetchModel, readModelFromFile } from '../makerworld/fetcher.js'
-import { gate } from '../makerworld/license.js'
+import { fetchModel, readModelFromFile } from '../sources/makerworld/fetcher.js'
+import { gate } from '../sources/makerworld/license.js'
 import { composeListingCopy } from '../ai/composer.js'
 import { stageImages, looksLikeSourceDownload } from '../images.js'
 import { ListingRecordSchema, ProductInputSchema, type ListingRecord, type ProductInput } from '../types.js'
@@ -161,7 +161,7 @@ export async function createCommand(options: CreateOptions): Promise<ListingReco
   io.detail(`Etsy tags: ${copy.etsy.tags.join(', ')}`)
 
   // ---- Images -------------------------------------------------------------
-  const id = `mw-${model.designId}-${randomUUID().slice(0, 6)}`
+  const id = `mw-${model.externalId}-${randomUUID().slice(0, 6)}`
   io.step('Staging images…')
   const images = await stageImages({
     listingId: id,

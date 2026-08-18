@@ -1,8 +1,8 @@
 import { parse as parseHtml, type HTMLElement } from 'node-html-parser'
-import { UserError, log } from '../util/log.js'
-import { request } from '../util/http.js'
+import { UserError, log } from '../../util/log.js'
+import { request } from '../../util/http.js'
 import { normaliseLicense } from './license.js'
-import { MakerWorldModelSchema, type MakerWorldImage, type MakerWorldModel } from '../types.js'
+import { SourceModelSchema, type SourceImage, type SourceModel } from '../../types.js'
 
 /**
  * Reads a single MakerWorld model page.
@@ -22,7 +22,7 @@ const USER_AGENT =
 /** e.g. https://makerworld.com/en/models/1234567-articulated-dragon#profileId-987 */
 const MODEL_URL = /^https?:\/\/(?:www\.)?makerworld\.com\/(?:[a-z]{2}\/)?models\/(\d+)/i
 
-export function parseModelUrl(input: string): { designId: string; normalised: string } {
+export function parseModelUrl(input: string): { externalId: string; normalised: string } {
   const match = MODEL_URL.exec(input.trim())
   if (!match?.[1]) {
     throw new UserError(
@@ -30,8 +30,8 @@ export function parseModelUrl(input: string): { designId: string; normalised: st
       'Expected something like https://makerworld.com/en/models/1234567-name',
     )
   }
-  const designId = match[1]
-  return { designId, normalised: `https://makerworld.com/en/models/${designId}` }
+  const externalId = match[1]
+  return { externalId, normalised: `https://makerworld.com/en/models/${externalId}` }
 }
 
 const BLOCKED_HINT =
@@ -106,7 +106,7 @@ interface Extracted {
   description?: string
   designer?: string
   tags?: string[]
-  images?: MakerWorldImage[]
+  images?: SourceImage[]
   license?: string
 }
 
@@ -280,7 +280,7 @@ function fromDesignObject(design: Record<string, unknown>): Extracted {
           const url = typeof c === 'string' ? c : ((c as Record<string, unknown> | null)?.['url'] as string | undefined)
           return url ? { url, rank: i } : null
         })
-        .filter((c): c is MakerWorldImage => c !== null)
+        .filter((c): c is SourceImage => c !== null)
     : undefined
 
   return {
@@ -370,8 +370,8 @@ function merge(...sources: (Extracted | null)[]): Extracted {
  * and downstream code copes; a missing title means the parse genuinely failed
  * and we say so rather than emitting a listing called "undefined".
  */
-export function parseModelHtml(html: string, inputUrl: string): MakerWorldModel {
-  const { designId, normalised } = parseModelUrl(inputUrl)
+export function parseModelHtml(html: string, inputUrl: string): SourceModel {
+  const { externalId, normalised } = parseModelUrl(inputUrl)
 
   const root = parseHtml(html)
 
@@ -407,9 +407,10 @@ export function parseModelHtml(html: string, inputUrl: string): MakerWorldModel 
   const licenseRaw = extracted.license ?? licenseFromText(html) ?? ''
   const license = normaliseLicense(licenseRaw)
 
-  const model: MakerWorldModel = {
+  const model: SourceModel = {
     sourceUrl: normalised,
-    designId,
+    platform: 'MAKERWORLD',
+    externalId,
     title: extracted.title,
     description: extracted.description ?? '',
     designer: extracted.designer ?? 'Unknown designer',
@@ -419,7 +420,7 @@ export function parseModelHtml(html: string, inputUrl: string): MakerWorldModel 
     fetchedAt: new Date().toISOString(),
   }
 
-  const parsed = MakerWorldModelSchema.safeParse(model)
+  const parsed = SourceModelSchema.safeParse(model)
   if (!parsed.success) {
     throw new UserError(
       `The parsed model failed validation:\n${parsed.error.issues.map((i) => `- ${i.path.join('.')}: ${i.message}`).join('\n')}`,
@@ -441,7 +442,7 @@ export function parseModelHtml(html: string, inputUrl: string): MakerWorldModel 
  * MakerWorld: the page was fetched by an ordinary browser session, and this
  * tool only parses the resulting local file.
  */
-export async function readModelFromFile(filePath: string, inputUrl: string): Promise<MakerWorldModel> {
+export async function readModelFromFile(filePath: string, inputUrl: string): Promise<SourceModel> {
   const { readFile } = await import('node:fs/promises')
   let html: string
   try {
@@ -460,16 +461,16 @@ export async function readModelFromFile(filePath: string, inputUrl: string): Pro
  * behind Cloudflare and usually refuses non-browser clients, so this often
  * fails and `readModelFromFile` is the dependable route.
  */
-export async function fetchModel(inputUrl: string): Promise<MakerWorldModel> {
-  const { designId, normalised } = parseModelUrl(inputUrl)
-  log.step(`Reading MakerWorld model ${designId}`)
+export async function fetchModel(inputUrl: string): Promise<SourceModel> {
+  const { externalId, normalised } = parseModelUrl(inputUrl)
+  log.step(`Reading MakerWorld model ${externalId}`)
   const html = await fetchPage(normalised)
   return parseModelHtml(html, normalised)
 }
 
-function dedupeImages(images: MakerWorldImage[]): MakerWorldImage[] {
+function dedupeImages(images: SourceImage[]): SourceImage[] {
   const seen = new Set<string>()
-  const out: MakerWorldImage[] = []
+  const out: SourceImage[] = []
   for (const image of images) {
     // MakerWorld serves the same asset at several CDN sizes; key on the path.
     let key = image.url

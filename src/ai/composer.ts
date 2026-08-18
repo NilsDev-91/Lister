@@ -8,11 +8,11 @@ import {
   EtsyTitleSchema,
   ListingCopySchema,
   type ListingCopy,
-  type MakerWorldModel,
+  type SourceModel,
   type ProductInput,
 } from '../types.js'
-import { requiresAttribution } from '../makerworld/license.js'
-import type { LicenseGateDecision } from '../makerworld/license.js'
+import { requiresAttribution } from '../sources/makerworld/license.js'
+import type { LicenseGateDecision } from '../sources/makerworld/license.js'
 import type { KeywordEvidence, SeoEvidence } from '../seo/types.js'
 
 /**
@@ -185,7 +185,7 @@ function formatEvidence(evidence: KeywordEvidence): string {
 }
 
 interface PromptArgs {
-  model: MakerWorldModel
+  model: SourceModel
   product: ProductInput
   gate: LicenseGateDecision
   credit: boolean
@@ -275,7 +275,7 @@ function describeIssues(error: z.ZodError): string {
 }
 
 export interface ComposeArgs {
-  model: MakerWorldModel
+  model: SourceModel
   product: ProductInput
   gate: LicenseGateDecision
   /**

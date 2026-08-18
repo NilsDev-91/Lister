@@ -9,8 +9,12 @@ import { SeoEvidenceSchema } from './seo/types.js'
  */
 
 // ---------------------------------------------------------------------------
-// MakerWorld source data
+// Source-platform data
 // ---------------------------------------------------------------------------
+
+/** Which platform a model page came from. */
+export const PlatformSchema = z.enum(['MAKERWORLD', 'CULTS3D', 'PRINTABLES'])
+export type Platform = z.infer<typeof PlatformSchema>
 
 /**
  * How a model's licence answers "may I sell prints of this?".
@@ -32,27 +36,49 @@ export const LicenseInfoSchema = z.object({
 })
 export type LicenseInfo = z.infer<typeof LicenseInfoSchema>
 
-export const MakerWorldImageSchema = z.object({
+export const SourceImageSchema = z.object({
   url: z.string().url(),
-  /** MakerWorld's own ordering; 0 is the cover image. */
+  /** The source platform's own ordering; 0 is the cover image. */
   rank: z.number().int().nonnegative(),
 })
-export type MakerWorldImage = z.infer<typeof MakerWorldImageSchema>
+export type SourceImage = z.infer<typeof SourceImageSchema>
 
-export const MakerWorldModelSchema = z.object({
-  sourceUrl: z.string().url(),
-  /** Numeric design id from the URL, kept as a string — it is an identifier, not a quantity. */
-  designId: z.string(),
-  title: z.string().min(1),
-  description: z.string(),
-  designer: z.string(),
-  tags: z.array(z.string()),
-  images: z.array(MakerWorldImageSchema),
-  license: LicenseInfoSchema,
-  /** ISO 8601, when MakerWorld exposes it. */
-  fetchedAt: z.string(),
-})
-export type MakerWorldModel = z.infer<typeof MakerWorldModelSchema>
+/**
+ * Records stored before the multi-platform rename carry `designId` and no
+ * `platform`. The rename must not strand them: the store validates on read,
+ * and a parse failure there moves the user's entire listings.json aside.
+ * `platform` needs no migration — its `.default('MAKERWORLD')` is correct by
+ * construction, since every pre-rename record came from MakerWorld.
+ */
+function migrateLegacySourceModel(value: unknown): unknown {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>
+    if (!('externalId' in record) && 'designId' in record) {
+      const { designId, ...rest } = record
+      return { ...rest, externalId: designId }
+    }
+  }
+  return value
+}
+
+export const SourceModelSchema = z.preprocess(
+  migrateLegacySourceModel,
+  z.object({
+    sourceUrl: z.string().url(),
+    platform: PlatformSchema.default('MAKERWORLD'),
+    /** The platform's own id for the model, kept as a string — it is an identifier, not a quantity. */
+    externalId: z.string(),
+    title: z.string().min(1),
+    description: z.string(),
+    designer: z.string(),
+    tags: z.array(z.string()),
+    images: z.array(SourceImageSchema),
+    license: LicenseInfoSchema,
+    /** ISO 8601, when the platform exposes it. */
+    fetchedAt: z.string(),
+  }),
+)
+export type SourceModel = z.infer<typeof SourceModelSchema>
 
 // ---------------------------------------------------------------------------
 // Seller-supplied facts
@@ -338,7 +364,7 @@ export const ListingRecordSchema = z.object({
   /** Local id, also used as the eBay SKU. */
   id: z.string(),
   sourceUrl: z.string().url(),
-  source: MakerWorldModelSchema,
+  source: SourceModelSchema,
   product: ProductInputSchema,
   copy: ListingCopySchema,
   /** Local paths of images staged for Etsy's multipart upload. */

@@ -23,7 +23,7 @@ function record(overrides: Record<string, unknown> = {}): Record<string, unknown
     sourceUrl: 'https://makerworld.com/en/models/1',
     source: {
       sourceUrl: 'https://makerworld.com/en/models/1',
-      designId: '1',
+      externalId: '1',
       title: 'Dart Holder',
       description: '',
       designer: 'OMMO',
@@ -118,5 +118,37 @@ describe('a stored listing meeting a newer schema', () => {
 
   it('still refuses a record with no product facts', () => {
     expect(ListingRecordSchema.safeParse(record({ product: undefined })).success).toBe(false)
+  })
+})
+
+describe('a record from before the multi-platform rename', () => {
+  // The store validates on read, and a failed parse moves the whole
+  // listings.json aside — so the rename `designId` → `externalId` and the new
+  // `platform` field must both absorb the old shape, not reject it.
+  it('adopts designId as externalId and defaults platform to MAKERWORLD', () => {
+    const legacySource = {
+      sourceUrl: 'https://makerworld.com/en/models/1',
+      designId: '1069737',
+      title: 'Dart Holder',
+      description: '',
+      designer: 'OMMO',
+      tags: [],
+      images: [],
+      license: { raw: 'CC BY 4.0', code: 'CC-BY-4.0', commercialUse: 'yes', reason: 'ok' },
+      fetchedAt: now,
+    }
+
+    const parsed = ListingRecordSchema.parse(record({ source: legacySource }))
+    expect(parsed.source.externalId).toBe('1069737')
+    expect(parsed.source.platform).toBe('MAKERWORLD')
+    expect('designId' in parsed.source).toBe(false)
+  })
+
+  it('prefers an explicit externalId over a stray designId', () => {
+    // Not a shape that is ever written, but the migration must not let an old
+    // leftover key overwrite the field the current code authored.
+    const source = { ...(record().source as object), designId: 'stale' }
+    const parsed = ListingRecordSchema.parse(record({ source }))
+    expect(parsed.source.externalId).toBe('1')
   })
 })

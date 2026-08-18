@@ -42,7 +42,7 @@ describe('parseModelUrl', () => {
       'https://makerworld.com/models/1029890',
       'https://www.makerworld.com/de/models/1029890-flexi#profileId-77',
     ]) {
-      expect(parseModelUrl(url).designId, url).toBe('1029890')
+      expect(parseModelUrl(url).externalId, url).toBe('1029890')
     }
   })
 
@@ -61,7 +61,7 @@ describe('parseModelHtml', () => {
     expect(model.title).toBe('Flexi Funny Octopus')
     expect(model.designer).toBe('TinkerFox')
     expect(model.description).toContain('articulated octopus')
-    expect(model.designId).toBe('1029890')
+    expect(model.externalId).toBe('1029890')
   })
 
   it('resolves the bare licence string through the gate', () => {

@@ -31,7 +31,7 @@ function listing(marketplaces: MarketplaceRecord[]): ListingRecord {
     sourceUrl: 'https://makerworld.com/en/models/1',
     source: {
       sourceUrl: 'https://makerworld.com/en/models/1',
-      designId: '1',
+      externalId: '1',
       title: 'Dart Holder',
       description: '',
       designer: 'OMMO',
