@@ -27,6 +27,13 @@ export interface CreateOptions {
   commercialRights: boolean
   /** You designed this model yourself. The only thing that opens the Etsy channel. */
   ownDesign: boolean
+  /**
+   * The seller's explicit acceptance of the Etsy own-design platform risk for
+   * this listing. Distinct from `commercialRights`: that one says "the
+   * designer permits the sale", this one says "I carry Etsy's authorship-rule
+   * risk myself". Neither implies the other.
+   */
+  acceptEtsyDesignRisk: boolean
   /** Add a designer credit line. Not an eBay requirement — a licence one. */
   credit: boolean
   yes: boolean
@@ -120,6 +127,19 @@ export async function createCommand(options: CreateOptions): Promise<ListingReco
       if (!(await io.confirm('Continue on that basis?'))) throw new UserError('Cancelled.')
   }
 
+  // The Etsy risk claim gets its own confirmation, like the rights override:
+  // it is a recorded decision to carry a platform risk, not a checkbox.
+  if (options.acceptEtsyDesignRisk && !options.ownDesign) {
+    io.warn(
+      `Etsy's Creativity Standards require the seller's own design, and this model is by ${model.designer}. ` +
+        'Accepting means Etsy can remove the listing with fees retained, and repeat findings reach the shop. ' +
+        'Your acceptance is stored on the listing with time and source URL.',
+    )
+    if (!options.yes && !(await io.confirm('Accept the Etsy own-design risk for this listing?'))) {
+      throw new UserError('Cancelled.', 'Re-run without --i-accept-etsy-design-risk to keep Etsy closed for it.')
+    }
+  }
+
   // ---- Seller facts -------------------------------------------------------
   const product = ProductInputSchema.parse({
     priceEur: options.price,
@@ -171,13 +191,16 @@ export async function createCommand(options: CreateOptions): Promise<ListingReco
     sku: options.sku?.trim() || null,
     licenseOverridden: decision.overridden,
     ownDesign: options.ownDesign,
-    // Etsy is only a channel for the seller's own designs. Since 10.06.2025 its
+    etsyDesignRiskAccepted:
+      options.acceptEtsyDesignRisk && !options.ownDesign ? { at: now, sourceUrl: model.sourceUrl } : null,
+    // Etsy is only a channel for the seller's own designs — or for a listing
+    // whose seller explicitly accepted the platform risk. Since 10.06.2025 the
     // Creativity Standards require original authorship, which a licence cannot
-    // supply — so a third-party model does not get an Etsy row at all rather
-    // than getting one that can never be published.
+    // supply — so without either claim a third-party model does not get an
+    // Etsy row at all rather than getting one that can never be published.
     marketplaces: [
       { marketplace: 'ebay', state: 'draft', remoteId: null, liveId: null, url: null, error: null, updatedAt: now },
-      ...(options.ownDesign
+      ...(options.ownDesign || options.acceptEtsyDesignRisk
         ? [{ marketplace: 'etsy', state: 'draft', remoteId: null, liveId: null, url: null, error: null, updatedAt: now }]
         : []),
     ],

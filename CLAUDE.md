@@ -12,6 +12,13 @@ deliberate — verify against it before treating behaviour as a bug.
 - Selling needs either a licence that provably permits it or an explicit
   rights assertion from the seller. An unknown or unparseable licence blocks
   the publish; drafting stays allowed.
+- Etsy own-design is default-deny with exactly one way through: the recorded
+  per-listing risk acceptance (`etsyDesignRiskAccepted`, stored with time and
+  source URL). It unlocks only that gate — never the licence rules or media
+  reuse — and is never a default or a global setting.
+- Etsy uploads only the seller's own photos. Source-platform downloads never
+  reach Etsy and there is no override for this; eBay's image handling is
+  separate and unchanged.
 - In the eBay sandbox, pass `--category-id` explicitly: the category
   suggestion endpoint responds with HTTP 200 and garbage there.
 

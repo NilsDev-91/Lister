@@ -140,6 +140,28 @@ gate, and still asks for confirmation.
 
 **This is a routing aid, not legal advice.** It reads a field on a web page.
 
+### The Etsy authorship gate
+
+Etsy asks a question no licence can answer: since 10 June 2025 its Creativity
+Standards require items "produced based on a seller's original design". A
+commercial licence only says the *designer* permits the sale — Etsy asks who
+designed it. So Etsy is **default-deny** for third-party models: without
+`--own-design` the listing gets no Etsy channel at all.
+
+There is one deliberate way through: `--i-accept-etsy-design-risk` (or the
+switch under "Herkunft und Rechte" on the listing page) records that **you**
+carry that platform risk for **this** listing. The decision is stored with
+timestamp and source URL — so it is provable later on what basis the listing
+went live — it survives revises, asks for confirmation, and shows up on the
+draft as an assertion rather than a verified condition. It unlocks nothing but
+this one gate: the licence rules, the media rules and every money check stay.
+
+**Etsy images have no override.** Etsy requires your own original material of
+the finished product — designer renders and generated product images never
+qualify, whatever the licence says (editing your own photos is fine).
+Source-platform downloads are excluded from Etsy uploads and a listing without
+at least one own photo is blocked.
+
 ---
 
 ## Images
@@ -151,9 +173,11 @@ you shoot photos:
 - **eBay** takes public **HTTPS URLs** and fetches them itself. It cannot see a
   local file. `--image-url https://…/photo.jpg`
 
-If the licence permits reuse, MakerWorld's own CDN URLs satisfy eBay directly and
-the tool downloads them for Etsy. If you use your own photos, they need to be
-hosted somewhere before eBay will accept them.
+If the licence permits reuse, MakerWorld's own CDN URLs satisfy **eBay**
+directly. **Etsy never gets downloaded source images** — it requires your own
+photos of the finished product, so staged downloads are excluded from Etsy
+uploads (see "The Etsy authorship gate"). If you use your own photos, they need
+to be hosted somewhere before eBay will accept them.
 
 ---
 

@@ -15,6 +15,7 @@ import { planAspects, factsFromProduct, ASPECT_TARGET } from '../marketplaces/eb
 import { auditEbayTitle } from '../marketplaces/ebay/title.js'
 import { auditEbayDescription } from '../marketplaces/ebay/description.js'
 import { imageDimensions } from '../util/image-meta.js'
+import { looksLikeSourceDownload } from '../images.js'
 import { resolveEbayCategory } from './aspects.js'
 
 /**
@@ -306,26 +307,50 @@ function checkContent(listing: ListingRecord, marketplaces: Marketplace[], repor
     // design". A commercial licence from the designer does not satisfy it: Etsy
     // asks for authorship, not for usage rights. Listing anyway means removal
     // with the fees still owed, and repeat findings reach the shop.
-    if (!listing.ownDesign) {
+    if (listing.ownDesign) {
+      report.ok('Marked as your own design, which is what Etsy requires')
+    } else if (listing.etsyDesignRiskAccepted) {
+      // Deliberately a warning on every run, not an ok: this listing stands on
+      // the seller's recorded assertion, not on a verified condition, and that
+      // difference must stay visible for as long as the listing exists.
+      report.warn(
+        'Etsy runs on your accepted design risk',
+        `You accepted Etsy's own-design platform risk for this listing on ` +
+          `${listing.etsyDesignRiskAccepted.at} (source: ${listing.etsyDesignRiskAccepted.sourceUrl}). ` +
+          'This is an assertion, not a verified condition — Etsy can still remove the listing under its ' +
+          'Creativity Standards, with fees retained.',
+      )
+    } else {
       report.block(
         'Etsy does not permit third-party designs',
         `This model is by ${listing.source.designer}. Since 10 June 2025 Etsy requires items to be produced from ` +
           "the seller's own original design — a commercial licence does not change that, because Etsy asks for " +
           'authorship rather than usage rights.',
-        'Only list your own designs on Etsy. eBay has no equivalent restriction and stays available.',
+        'Only list your own designs on Etsy (eBay has no equivalent restriction) — or, if you decide to carry ' +
+          'the platform risk for this listing, record that with the Etsy risk switch on the listing page.',
       )
-    } else {
-      report.ok('Marked as your own design, which is what Etsy requires')
     }
 
-    const missing = listing.imagePaths.filter((p) => !existsSync(p))
-    if (!listing.imagePaths.length) {
-      report.block('Etsy has no images', 'Etsy uploads actual files and refuses to activate a listing without one.')
+    // Etsy sees only the seller's own files; source-platform downloads are
+    // excluded with no override — Etsy wants original material of the
+    // finished product, whatever the licence says.
+    const ownImages = listing.imagePaths.filter((p) => !looksLikeSourceDownload(p))
+    const missing = ownImages.filter((p) => !existsSync(p))
+    if (!ownImages.length) {
+      report.block(
+        listing.imagePaths.length ? 'Etsy has no images of your own' : 'Etsy has no images',
+        listing.imagePaths.length
+          ? `All ${listing.imagePaths.length} staged file(s) are source-platform downloads, and those never go ` +
+            'to Etsy: its seller policy requires your own original material of the finished product — no ' +
+            'designer renders, no generated product images. Editing your own photos is fine.'
+          : 'Etsy uploads actual files and refuses to activate a listing without one.',
+        'Photograph the item you printed and add the files in the editor or with --image <file>.',
+      )
     } else if (missing.length) {
       report.block('Staged Etsy images are gone from disk', missing.join('\n'), 'Re-run `create` to stage them again.')
     } else {
-      report.ok(`Etsy has ${listing.imagePaths.length} staged image file(s)`)
-      checkEtsyImageFiles(listing, report)
+      report.ok(`Etsy has ${ownImages.length} staged image file(s) of your own`)
+      checkEtsyImageFiles(ownImages, report)
     }
 
     const titleWords = listing.copy.etsy.title.split(/\s+/).filter(Boolean).length
@@ -376,33 +401,16 @@ function checkContent(listing: ListingRecord, marketplaces: Marketplace[], repor
 }
 
 /**
- * Whether a staged file looks like a MakerWorld download rather than a photo.
+ * Etsy image constraints that can be checked from the staged files alone.
  *
- * `downloadImages` names its files `01.jpg`, `02.png`, … while seller uploads
- * are `own-01.jpg` or arbitrary paths. A heuristic, and labelled as one — but
- * Etsy's seller policy explicitly forbids "artistic renderings" as listing
- * photos, and a downloaded render is the default failure mode of this pipeline.
+ * Runs on the seller's OWN files only — source-platform downloads never reach
+ * Etsy (see the caller's blocker), so checking them here would warn about
+ * files that are not going anywhere.
  */
-function looksDownloaded(path: string): boolean {
-  return /^\d{2}\.(jpe?g|png|gif|webp)$/i.test(path.split(/[\\/]/).pop() ?? '')
-}
-
-/** Etsy image constraints that can be checked from the staged files alone. */
-function checkEtsyImageFiles(listing: ListingRecord, report: Report): void {
-  const downloaded = listing.imagePaths.filter(looksDownloaded)
-  if (downloaded.length) {
-    report.warn(
-      'Staged Etsy images look like downloaded renders',
-      `${downloaded.length} file(s) carry the staging names the MakerWorld download uses. Etsy's seller policy ` +
-        'forbids stock photos and artistic renderings as listing images — the first photo especially must show ' +
-        'the finished physical product.',
-      'Photograph your printed item and replace the downloads.',
-    )
-  }
-
+function checkEtsyImageFiles(ownImages: string[], report: Report): void {
   // Etsy does not take WebP; a staged .webp fails at upload time with an
   // unhelpful error, so it is called out while renaming is still cheap.
-  const webp = listing.imagePaths.filter((p) => extname(p).toLowerCase() === '.webp')
+  const webp = ownImages.filter((p) => extname(p).toLowerCase() === '.webp')
   if (webp.length) {
     report.warn(
       'Staged Etsy images include WebP files',
@@ -414,7 +422,7 @@ function checkEtsyImageFiles(listing: ListingRecord, report: Report): void {
   // Etsy's help pages disagree with each other on the ceiling (300 KB vs 1 MB);
   // the stricter figure is the one its upload endpoint is documented to time
   // out at, so that is the one worth flagging.
-  const oversized = listing.imagePaths.filter((p) => {
+  const oversized = ownImages.filter((p) => {
     try {
       return statSync(p).size > 300 * 1024
     } catch {
@@ -424,13 +432,13 @@ function checkEtsyImageFiles(listing: ListingRecord, report: Report): void {
   if (oversized.length) {
     report.warn(
       'Etsy images are over 300 KB',
-      `${oversized.length} of ${listing.imagePaths.length} file(s). Etsy documents that uploads above 300 KB may time out; ` +
+      `${oversized.length} of ${ownImages.length} file(s). Etsy documents that uploads above 300 KB may time out; ` +
         'at 2000px width that means aggressive JPEG compression.',
     )
   }
 
   // The first photo is the one Etsy's search-visibility page actually measures.
-  const first = listing.imagePaths[0]
+  const first = ownImages[0]
   if (!first) return
   let dims: ReturnType<typeof imageDimensions> = null
   try {

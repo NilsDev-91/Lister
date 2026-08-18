@@ -406,6 +406,7 @@ async function handleCreate(req: IncomingMessage, res: ServerResponse): Promise<
       commercialRights: fields['commercialRights'] === '1',
       credit: fields['credit'] === '1',
       ownDesign: fields['ownDesign'] === '1',
+      acceptEtsyDesignRisk: fields['etsyDesignRisk'] === '1',
       // The form already said what would happen; there is nobody to prompt.
       yes: true,
       io,
@@ -527,16 +528,58 @@ async function handleListingAction(
     // not licensed for a sale that is not.
     const imagesLicensed = overridden && fields['imagesLicensed'] === '1'
     const current = get(id) ?? listing
-    upsert({ ...current, licenseOverridden: overridden, sourceImagesLicensed: imagesLicensed })
+
+    // The Etsy risk claim keeps its original timestamp: it records when the
+    // decision was made, and re-saving the form is not a new decision.
+    const riskChecked = fields['etsyDesignRisk'] === '1'
+    const etsyDesignRiskAccepted = riskChecked
+      ? (current.etsyDesignRiskAccepted ?? { at: new Date().toISOString(), sourceUrl: current.sourceUrl })
+      : null
+
+    // The claim opens and closes the Etsy channel row. Withdrawing it removes
+    // the row only while nothing exists remotely — a row with a remote draft
+    // or live listing keeps its history, and the publish gate blocks anyway.
+    let marketplaces = current.marketplaces
+    const hasEtsyRow = marketplaces.some((m) => m.marketplace === 'etsy')
+    const etsyOpen = current.ownDesign || etsyDesignRiskAccepted !== null
+    if (etsyOpen && !hasEtsyRow) {
+      marketplaces = [
+        ...marketplaces,
+        {
+          marketplace: 'etsy',
+          state: 'draft',
+          remoteId: null,
+          liveId: null,
+          url: null,
+          error: null,
+          updatedAt: new Date().toISOString(),
+        },
+      ]
+    } else if (!etsyOpen && hasEtsyRow) {
+      marketplaces = marketplaces.filter(
+        (m) => m.marketplace !== 'etsy' || m.remoteId !== null || m.liveId !== null,
+      )
+    }
+
+    upsert({
+      ...current,
+      licenseOverridden: overridden,
+      sourceImagesLicensed: imagesLicensed,
+      etsyDesignRiskAccepted,
+      marketplaces,
+    })
     redirect(
       res,
       flashUrl(
         backTo,
         'ok',
-        overridden
+        (overridden
           ? `Als lizenziert markiert${imagesLicensed ? ', Bilder eingeschlossen' : ''}. ` +
             'Prüfe, dass der Text keine Lizenz nennt — die auf der Seite ist nicht die, unter der du verkaufst.'
-          : 'Rechte-Angabe zurückgenommen. Veröffentlichen ist wieder gesperrt.',
+          : 'Rechte-Angabe zurückgenommen. Veröffentlichen ist wieder gesperrt.') +
+          (riskChecked && !current.ownDesign
+            ? ' Etsy-Eigendesign-Risiko übernommen — protokolliert mit Zeitpunkt und Quelle.'
+            : ''),
       ),
     )
     return

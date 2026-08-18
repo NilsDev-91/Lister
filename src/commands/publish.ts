@@ -7,6 +7,7 @@ import type { AspectSpec } from '../marketplaces/ebay/aspect-spec.js'
 import { planAspects, factsFromProduct } from '../marketplaces/ebay/aspects.js'
 import { resolveEbayCategory } from './aspects.js'
 import * as etsy from '../marketplaces/etsy/client.js'
+import { looksLikeSourceDownload } from '../images.js'
 import { config } from '../config.js'
 
 /**
@@ -435,19 +436,57 @@ export function matchTaxonomy(nodes: etsy.TaxonomyNode[], hint: string): etsy.Ta
 }
 
 /**
- * Etsy is closed to third-party designs, and no licence reopens it.
+ * Etsy is closed to third-party designs — default deny, with one deliberate
+ * way through.
+ *
+ * Etsy's Creativity Standards ask for authorship, and a commercial licence
+ * answers a different question, so no licence reopens this gate. What does is
+ * `etsyDesignRiskAccepted`: the seller's explicit, per-listing, recorded
+ * decision to carry the platform risk (see the field's schema note). The
+ * assertion is logged with time and source URL; it is never a default and
+ * never global.
  *
  * Enforced here as well as in preflight because publish can be run with
  * `--skip-preflight`, and this is not a check worth letting a flag past: the
  * penalty is listing removal with the fees retained.
  */
-function requireOwnDesign(listing: ListingRecord): void {
+export function requireOwnDesign(listing: ListingRecord): void {
   if (listing.ownDesign) return
+  if (listing.etsyDesignRiskAccepted) return
   throw new UserError(
     `Etsy does not accept third-party designs, and this model is by ${listing.source.designer}.`,
     "Since 10 June 2025 Etsy requires items produced from the seller's own original design. A commercial licence " +
-      'does not satisfy it — Etsy asks for authorship, not usage rights. eBay has no such restriction.',
+      'does not satisfy it — Etsy asks for authorship, not usage rights. eBay has no such restriction. ' +
+      'If you decide to carry that platform risk for this listing, record it with the Etsy risk switch on the ' +
+      'listing page or create with --i-accept-etsy-design-risk.',
   )
+}
+
+/**
+ * Etsy gets the seller's own images only — no override exists for this.
+ *
+ * Etsy requires original material of the finished product; designer renders
+ * and generated product shots are out regardless of licence and regardless of
+ * `etsyDesignRiskAccepted` (editing your own photos is fine). Source-platform
+ * downloads are recognised by their staging names (`looksLikeSourceDownload`)
+ * and excluded; what remains must not be empty. Enforced in the publish path
+ * so `--skip-preflight` cannot get past it. eBay is untouched — it runs on
+ * `imageUrls` and its own licence gate.
+ */
+export function requireOwnEtsyImages(listing: ListingRecord): string[] {
+  const own = listing.imagePaths.filter((p) => !looksLikeSourceDownload(p))
+  if (!own.length) {
+    const downloaded = listing.imagePaths.length - own.length
+    throw new UserError(
+      downloaded
+        ? `Etsy needs your own photos and all ${downloaded} staged file(s) are source-platform downloads.`
+        : 'Etsy requires at least one image and this listing has none staged.',
+      'Etsy asks for your own original material of the finished product — designer renders and generated ' +
+        'product images are not eligible, whatever the licence says. Photograph the item you printed ' +
+        '(editing your own photos is fine) and add the files in the editor or with --image <file>.',
+    )
+  }
+  return own
 }
 
 async function publishToEtsy(listing: ListingRecord, options: PublishOptions): Promise<void> {
@@ -456,10 +495,10 @@ async function publishToEtsy(listing: ListingRecord, options: PublishOptions): P
   requireSaleRights(listing)
   requireOwnDesign(listing)
 
-  if (!listing.imagePaths.length) {
-    throw new UserError(
-      'Etsy requires at least one image and this listing has none staged.',
-      'Re-run `create` with --image <file>, or with a model whose licence permits reusing its renders.',
+  const ownImages = requireOwnEtsyImages(listing)
+  if (ownImages.length < listing.imagePaths.length) {
+    io.detail(
+      `${listing.imagePaths.length - ownImages.length} source-platform download(s) stay off Etsy — only your own photos are uploaded.`,
     )
   }
 
@@ -625,9 +664,10 @@ async function publishToEtsy(listing: ListingRecord, options: PublishOptions): P
     // Images belong to the draft, so a reused draft already carries them —
     // uploading again would append duplicates, not replace.
     // Etsy accepts up to 20 photos per listing (doubled from 10 in late 2025).
-    const toUpload = listing.imagePaths.slice(0, 20)
-    if (listing.imagePaths.length > toUpload.length) {
-      io.warn(`Etsy takes 20 photos per listing; the last ${listing.imagePaths.length - toUpload.length} are skipped.`)
+    // Only the seller's own photos: source downloads were filtered above.
+    const toUpload = ownImages.slice(0, 20)
+    if (ownImages.length > toUpload.length) {
+      io.warn(`Etsy takes 20 photos per listing; the last ${ownImages.length - toUpload.length} are skipped.`)
     }
     io.step(`Etsy: uploading ${toUpload.length} image(s)…`)
     for (const [index, path] of toUpload.entries()) {

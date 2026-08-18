@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchTaxonomy, requireSaleRights } from './publish.js'
+import { matchTaxonomy, requireSaleRights, requireOwnDesign, requireOwnEtsyImages } from './publish.js'
 import type { TaxonomyNode } from '../marketplaces/etsy/client.js'
 import type { ListingRecord } from '../types.js'
 
@@ -87,5 +87,87 @@ describe('requireSaleRights', () => {
     // state. Treating it as a refusal here would block every model whose page
     // shape we do not recognise.
     expect(() => requireSaleRights(withLicence('unknown'))).not.toThrow()
+  })
+})
+
+/**
+ * The Etsy gates in the publish path itself — the ones `--skip-preflight`
+ * cannot get past. Same cast-record pattern as `requireSaleRights` above.
+ */
+function etsyListing(over: Record<string, unknown> = {}): ListingRecord {
+  return {
+    source: {
+      designer: 'OMMO',
+      license: { raw: 'Standard Digital File License', commercialUse: 'no' },
+    },
+    ownDesign: false,
+    licenseOverridden: false,
+    etsyDesignRiskAccepted: null,
+    imagePaths: [],
+    ...over,
+  } as unknown as ListingRecord
+}
+
+const RISK = { at: '2026-08-18T10:00:00.000Z', sourceUrl: 'https://makerworld.com/en/models/1' }
+
+describe('requireOwnDesign', () => {
+  it('refuses a third-party design with no claim at all', () => {
+    expect(() => requireOwnDesign(etsyListing())).toThrow(/third-party designs/i)
+  })
+
+  it('lets an own design through', () => {
+    expect(() => requireOwnDesign(etsyListing({ ownDesign: true }))).not.toThrow()
+  })
+
+  it('lets a recorded risk acceptance through', () => {
+    expect(() => requireOwnDesign(etsyListing({ etsyDesignRiskAccepted: RISK }))).not.toThrow()
+  })
+
+  it('is NOT opened by the commercial-rights override — different claims', () => {
+    expect(() => requireOwnDesign(etsyListing({ licenseOverridden: true }))).toThrow(/third-party designs/i)
+  })
+
+  it('points at the risk switch so the seller knows the deliberate way through', () => {
+    try {
+      requireOwnDesign(etsyListing())
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect((error as { hint?: string }).hint).toMatch(/risk switch|i-accept-etsy-design-risk/i)
+    }
+  })
+})
+
+describe('requireOwnEtsyImages', () => {
+  it('refuses when every staged file is a source-platform download', () => {
+    expect(() =>
+      requireOwnEtsyImages(etsyListing({ imagePaths: ['C:\\stage\\01.png', 'C:\\stage\\02.jpg'] })),
+    ).toThrow(/source-platform downloads/i)
+  })
+
+  it('refuses when nothing is staged at all', () => {
+    expect(() => requireOwnEtsyImages(etsyListing())).toThrow(/none staged/i)
+  })
+
+  it('returns only the own files from a mixed set', () => {
+    const own = requireOwnEtsyImages(
+      etsyListing({ imagePaths: ['C:\\stage\\01.png', 'C:\\photos\\own-01.jpg'] }),
+    )
+    expect(own).toEqual(['C:\\photos\\own-01.jpg'])
+  })
+
+  it('has no override — the design-risk acceptance changes nothing here', () => {
+    expect(() =>
+      requireOwnEtsyImages(
+        etsyListing({ etsyDesignRiskAccepted: RISK, imagePaths: ['C:\\stage\\01.png'] }),
+      ),
+    ).toThrow(/source-platform downloads/i)
+  })
+})
+
+describe('requireSaleRights ignores the Etsy risk claim', () => {
+  it('a forbidden licence still blocks with the risk accepted', () => {
+    expect(() => requireSaleRights(etsyListing({ etsyDesignRiskAccepted: RISK }))).toThrow(
+      /does not permit selling prints/i,
+    )
   })
 })

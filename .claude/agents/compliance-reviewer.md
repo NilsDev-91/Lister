@@ -25,11 +25,20 @@ sections of ARCHITECTURE.md, then check against these invariants:
    `'unknown'` without confirmation must block the publish in BOTH marketplace
    paths, including with `--skip-preflight` (`requireSaleRights`,
    `requireOwnDesign`). Drafting stays allowed.
-4. **The two rights assertions stay separate.** `licenseOverridden` alone
-   never unlocks designer images; `sourceImagesLicensed` works only together
-   with it; nothing unlocks text reuse.
-5. **Etsy stays closed for third-party designs.** No path may publish to Etsy
-   without `ownDesign`.
+4. **The rights assertions stay separate.** `licenseOverridden` alone never
+   unlocks designer images; `sourceImagesLicensed` works only together with
+   it; nothing unlocks text reuse. `etsyDesignRiskAccepted` unlocks only the
+   Etsy own-design gate — never the licence gate, never media reuse — and
+   none of the other assertions unlock the own-design gate in return.
+5. **Etsy own-design stays default-deny.** A publish to Etsy needs
+   `ownDesign` or a recorded `etsyDesignRiskAccepted` (an object with `at`
+   and `sourceUrl`, per listing — never a boolean default, never global).
+   The recorded form is the point: it must stay persisted and visible.
+6. **Etsy gets the seller's own images only, with NO override.** Source
+   downloads (`looksLikeSourceDownload`) are excluded from Etsy uploads and
+   an Etsy publish without at least one own image is refused, also with
+   `--skip-preflight` (`requireOwnEtsyImages`). eBay's image path is separate
+   and stays as it is.
 
 Report every violation as `file:line` plus one sentence naming the broken
 invariant and the concrete failure it enables. If the diff is clean, say so

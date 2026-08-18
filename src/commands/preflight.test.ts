@@ -297,3 +297,68 @@ describe('licence sale gate', () => {
     expect(report.blockers.some((b) => /forbids selling/i.test(b.title))).toBe(false)
   })
 })
+
+describe('the Etsy design-risk override', () => {
+  const isGate = (title: string) => /third-party designs/i.test(title)
+  const RISK = { at: '2026-08-18T10:00:00.000Z', sourceUrl: 'https://makerworld.com/en/models/1' }
+
+  it('clears the design gate when the risk is recorded', () => {
+    const report = auditContent(listing({ ownDesign: false, etsyDesignRiskAccepted: RISK }), ['etsy'])
+    expect(report.blockers.some((b) => isGate(b.title))).toBe(false)
+  })
+
+  it('keeps the assertion visible as a warning on every run', () => {
+    // Deliberately a warning, never an ok: the listing stands on a claim, not
+    // on a verified condition, and that difference must not fade.
+    const report = auditContent(listing({ ownDesign: false, etsyDesignRiskAccepted: RISK }), ['etsy'])
+    const warning = report.findings.find((f) => /accepted design risk/i.test(f.title))
+    expect(warning?.severity).toBe('warning')
+    expect(warning?.detail).toContain('2026-08-18')
+  })
+
+  it('does not touch the licence gate — SDFL still blocks the sale', () => {
+    const report = auditContent(listing({ ownDesign: false, etsyDesignRiskAccepted: RISK }), ['etsy'])
+    expect(report.blockers.some((b) => /licence forbids selling/i.test(b.title))).toBe(true)
+  })
+
+  it('does not unlock the designer media — their images still block', () => {
+    const report = auditContent(
+      listing({
+        etsyDesignRiskAccepted: RISK,
+        imageUrls: ['https://makerworld.bblmw.com/makerworld/model/x/design/a.png'],
+      }),
+      ['ebay', 'etsy'],
+    )
+    expect(report.blockers.map((b) => b.title)).toContain("Listing uses the designer's own images")
+  })
+
+  it('changes nothing on eBay', () => {
+    const withRisk = auditContent(listing({ etsyDesignRiskAccepted: RISK }), ['ebay'])
+    const without = auditContent(listing({}), ['ebay'])
+    expect(withRisk.findings.map((f) => f.title)).toEqual(without.findings.map((f) => f.title))
+  })
+
+  it('the commercial-rights override still does not open the design gate', () => {
+    const report = auditContent(listing({ ownDesign: false, licenseOverridden: true }), ['etsy'])
+    expect(report.blockers.some((b) => isGate(b.title))).toBe(true)
+  })
+})
+
+describe('the Etsy own-images rule', () => {
+  const RISK = { at: '2026-08-18T10:00:00.000Z', sourceUrl: 'https://makerworld.com/en/models/1' }
+
+  it('blocks when every staged file is a source-platform download — override or not', () => {
+    const report = auditContent(
+      listing({ etsyDesignRiskAccepted: RISK, imagePaths: ['C:\\stage\\01.png', 'C:\\stage\\02.jpg'] }),
+      ['etsy'],
+    )
+    const finding = report.blockers.find((b) => /no images of your own/i.test(b.title))
+    expect(finding).toBeDefined()
+    expect(finding?.detail).toMatch(/source-platform downloads/)
+  })
+
+  it('still blocks an Etsy draft with no images at all', () => {
+    const report = auditContent(listing({ etsyDesignRiskAccepted: RISK, imagePaths: [] }), ['etsy'])
+    expect(report.blockers.some((b) => /no images/i.test(b.title))).toBe(true)
+  })
+})

@@ -27,6 +27,21 @@ export interface StagedImages {
 
 const MAX_BYTES = 10 * 1024 * 1024 // Etsy rejects uploads above ~10 MB.
 
+/**
+ * Whether a staged file looks like a source-platform download rather than the
+ * seller's own photo.
+ *
+ * `downloadImages` below names its files `01.jpg`, `02.png`, … while seller
+ * uploads are `own-01.jpg` (web UI) or arbitrary paths (CLI). A heuristic,
+ * and labelled as one — renaming a file changes its verdict. It is the
+ * boundary the Etsy image rule runs on: Etsy requires the seller's own
+ * original material of the finished product, so downloads never qualify
+ * there, whatever the licence says.
+ */
+export function looksLikeSourceDownload(path: string): boolean {
+  return /^\d{2}\.(jpe?g|png|gif|webp)$/i.test(path.split(/[\\/]/).pop() ?? '')
+}
+
 function extensionFor(url: string, contentType: string | null): string {
   const fromUrl = extname(new URL(url).pathname).toLowerCase()
   if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(fromUrl)) return fromUrl

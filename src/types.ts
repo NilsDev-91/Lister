@@ -381,6 +381,31 @@ export const ListingRecordSchema = z.object({
    */
   sourceImagesLicensed: z.boolean().default(false),
   /**
+   * The seller's explicit, per-listing acceptance of the Etsy own-design risk.
+   *
+   * Etsy's Creativity Standards ask for authorship; a commercial licence from
+   * the designer answers a different question (whether the designer permits
+   * the sale) and cannot satisfy them. This field records the seller's
+   * deliberate decision to carry that platform risk anyway — for THIS listing.
+   * It unlocks nothing but the own-design gate: the licence default-deny,
+   * media reuse and every money invariant stay untouched.
+   *
+   * Recorded with the moment and the source URL so that, in a dispute, it is
+   * provable on what basis the listing went live. Never global, never from a
+   * config file; a draft without it stays blocked for Etsy.
+   *
+   * Authored, so no `.catch()` — the same rule as the two assertions above.
+   */
+  etsyDesignRiskAccepted: z
+    .object({
+      /** ISO 8601 — when the seller made the claim. */
+      at: z.string(),
+      /** The model page the claim was made for. */
+      sourceUrl: z.string(),
+    })
+    .nullable()
+    .default(null),
+  /**
    * The keyword research the copy was written against, per marketplace.
    *
    * Persisted so a tag can be traced back to the evidence that justified it,

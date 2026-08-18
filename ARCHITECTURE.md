@@ -32,7 +32,7 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Keyword-Recherche | fertig, **live gegen echte Etsy-Daten gelaufen**; eBay-Hälfte ungeprüft |
 | eBay-Aspect-Engine | fertig, **live gegen die Sandbox-Taxonomy geprüft** (6 → 8 Merkmale) |
 | eBay-Titel-Sanitizer | fertig: Emoji und `?` im Schema, Rest als Preflight-Warnung |
-| Etsy-Eignungs-Gate | fertig, hart: ohne `ownDesign` kein Kanal, kein Publish |
+| Etsy-Eignungs-Gate | fertig, Default-Deny; seit 18.08. mit protokolliertem Per-Listing-Override (`etsyDesignRiskAccepted`, Zeitpunkt+Quelle) — Bildregel bleibt ohne Override: Etsy bekommt nur eigene Fotos |
 | Preis-Check | fertig, im Preflight und in der UI, live geprüft |
 | Titelvarianten | fertig, 5 je Marktplatz, live geprüft |
 | Entwurf-Zustand | fertig: entwerfen → ansehen → übernehmen/verwerfen |
@@ -653,7 +653,7 @@ Inventory-PUT ist ein Full-Replace. Eingehängt in Draft-Erstellung UND Revise.
 (Etsy hat keine Sandbox; Drafts sind kostenlos) und ein Eigendesign-Inserat,
 denn das ownDesign-Gate gilt unverändert.
 
-## Etsy ist für Fremddesigns geschlossen
+## Etsy ist für Fremddesigns geschlossen — Default-Deny mit protokolliertem Override
 
 **Seit dem 10.06.2025 verlangen Etsys Creativity Standards Urheberschaft am
 Entwurf** — „produced based on a seller's original design". Eine kommerzielle
@@ -665,6 +665,40 @@ Umgesetzt als `ownDesign` am Datensatz (authored, kein `.catch()`, Default
 `false`): Ohne das Flag bekommt ein Inserat **gar keine** Etsy-Zeile in
 `marketplaces[]`, Preflight blockiert, `publishToEtsy` verweigert auch mit
 `--skip-preflight`, und die UI sperrt die Etsy-Karte mit Begründung.
+
+**Seit 18.08. gibt es einen bewussten Override:** `etsyDesignRiskAccepted`
+(Objekt `{ at, sourceUrl }`, authored, Default `null`), gesetzt per
+`--i-accept-etsy-design-risk` beim Anlegen oder über den Schalter unter
+„Herkunft und Rechte" — pro Inserat, nie global, nie aus einer Konfiguration,
+mit eigener Bestätigung. Der Grund für diese Bauform, festgehalten für später:
+
+- **Die Lizenz beantwortet Etsys Frage nicht.** Wer das Plattformrisiko
+  trotzdem tragen will, trifft eine eigene Entscheidung — die gehört als
+  solche erfasst, nicht als stilles Konfig-Bit.
+- **Das Risiko ist bewusst übernommen**, nicht wegdefiniert: Preflight zeigt
+  bei gesetztem Override dauerhaft eine Warnung („Behauptung, keine geprüfte
+  Bedingung"), `show` und die UI markieren es mit Datum.
+- **Die Protokollierung (Zeitpunkt + Quell-URL) existiert, damit im
+  Streitfall belegbar ist, auf welcher Grundlage ein Listing online ging.**
+  Deshalb behält ein erneutes Speichern des Formulars den ursprünglichen
+  Zeitpunkt, und der Override übersteht Revise.
+- Der Override schaltet **ausschließlich** das Eigendesign-Gate frei
+  (`requireOwnDesign` akzeptiert ihn als zweite Bedingung). Lizenz-Gate,
+  Medien-Reuse und alle Geld-Invarianten kennen das Feld nicht. Umgekehrt
+  schaltet keine andere Behauptung dieses Gate frei.
+- Zurücknehmbar: Der Schalter entfernt die Etsy-Zeile nur, solange remote
+  nichts existiert; danach blockt das Gate den nächsten Publish/Revise.
+
+**Die Bildregel hat KEIN Override.** Etsy verlangt eigenes Originalmaterial
+des fertigen Produkts — Designer-Renders und generierte Produktbilder sind
+raus, unabhängig von Lizenz und Override (eigene Fotos nachbearbeiten ist in
+Ordnung). Durchgesetzt doppelt: `requireOwnEtsyImages` im Publish-Pfad (auch
+mit `--skip-preflight`; gefiltert wird per `looksLikeSourceDownload` in
+`images.ts` — Downloads heißen `NN.ext`) und als Preflight-Blocker statt der
+früheren Warnung. Etsy lädt nur die eigenen Dateien hoch; eBay bleibt
+unverändert (eigene Gates, eigener Bildweg über URLs). Die bekannte Grenze
+bleibt: Die Heuristik erkennt Namen, nicht Bildinhalte — eine umbenannte
+Datei sieht sie nicht.
 
 eBay kennt diese Einschränkung nicht. Dort trägt der MakerWorld-Fall.
 

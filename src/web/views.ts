@@ -370,6 +370,15 @@ export function newListingForm(error?: string, settings: Settings = DEFAULT_SETT
             </label>
             <p class="note">Schaltet Etsy frei. Etsy verlangt seit dem 10.06.2025 Urheberschaft am Entwurf —
               eine Lizenz vom Designer reicht dort nicht. Für eBay ist das ohne Belang.</p>
+            <div class="gap"></div>
+            <label style="display:flex; gap:.5rem; align-items:flex-start; color:var(--ink)">
+              <input type="checkbox" name="etsyDesignRisk" value="1" style="margin-top:.25rem">
+              <span>Fremddesign, aber ich übernehme das Etsy-Eigendesign-Risiko</span>
+            </label>
+            <p class="note">Schaltet Etsy trotz Fremddesign frei. Etsy kann das Inserat unter den
+              Creativity Standards entfernen; Gebühren bleiben fällig. Die Entscheidung wird mit
+              Zeitpunkt und Quell-URL protokolliert und schaltet nur dieses eine Gate frei —
+              Lizenzpflicht und die Regel „nur eigene Fotos für Etsy" bleiben bestehen.</p>
           </div>
 
           <div class="card">
@@ -766,10 +775,9 @@ function originCard(listing: ListingRecord): string {
   // the wrong one: the ordinary commercial membership covers the model and not
   // the creator's photographs, so a seller who ticks "I may sell this" must not
   // silently also be saying "and I may use their pictures".
-  const rights = permits
+  const licenceBoxes = permits
     ? ''
-    : `<form method="post" action="/listing/${esc(listing.id)}/rights">
-         <label class="check-line" style="align-items:flex-start; gap:.5rem">
+    : `<label class="check-line" style="align-items:flex-start; gap:.5rem">
            <input type="checkbox" name="overridden" value="1" ${listing.licenseOverridden ? 'checked' : ''}
                   style="margin-top:.25rem">
            <span>Ich halte eine kommerzielle Lizenz für dieses Modell</span>
@@ -787,9 +795,34 @@ function originCard(listing: ListingRecord): string {
             Mitgliedschaftsvereinbarung lizenziert Fotos und Renderings an <em>MakerWorld</em>, nicht an
             Abonnenten. Nur ankreuzen, wenn deine Vereinbarung die Bilder ausdrücklich einschließt —
             fremde Produktfotos sind der klassische VeRO-Fall, und der trifft das Konto.
-            Wirkt nur zusammen mit der Angabe darüber.</p>
-         <div class="actions"><button class="btn ghost" type="submit">Rechte-Angabe speichern</button></div>
-       </form>`
+            Wirkt nur zusammen mit der Angabe darüber. Für eBay-Bilder — Etsy nimmt grundsätzlich
+            nur deine eigenen Fotos.</p>
+         <div class="gap"></div>`
+
+  // A third, again separate claim: Etsy's authorship rule. A licence answers
+  // whether the designer permits the sale; Etsy asks who designed it. The
+  // seller can decide to carry that platform risk — per listing, recorded.
+  const etsyRisk = listing.ownDesign
+    ? ''
+    : `<label class="check-line" style="align-items:flex-start; gap:.5rem">
+           <input type="checkbox" name="etsyDesignRisk" value="1" ${listing.etsyDesignRiskAccepted ? 'checked' : ''}
+                  style="margin-top:.25rem">
+           <span>Ich übernehme das Etsy-Eigendesign-Risiko für dieses Inserat</span>
+         </label>
+         <p class="note">Etsys Creativity Standards verlangen seit dem 10.06.2025 ein eigenes Design —
+            eine Lizenz des Designers beantwortet diese Frage nicht. Mit dem Haken trägst du das
+            Plattformrisiko bewusst selbst: Etsy kann das Inserat entfernen, Gebühren bleiben fällig.
+            Die Entscheidung wird mit Zeitpunkt und Quell-URL am Inserat protokolliert.
+            Sie schaltet nur das Eigendesign-Gate frei — Lizenzpflicht und Bildregeln bleiben.</p>`
+
+  const form =
+    licenceBoxes || etsyRisk
+      ? `<form method="post" action="/listing/${esc(listing.id)}/rights">
+           ${licenceBoxes}
+           ${etsyRisk}
+           <div class="actions"><button class="btn ghost" type="submit">Rechte-Angabe speichern</button></div>
+         </form>`
+      : ''
 
   return `<div class="card">
     <h3>Herkunft und Rechte</h3>
@@ -798,9 +831,15 @@ function originCard(listing: ListingRecord): string {
       von ${esc(listing.source.designer)}<br>
       Lizenz: ${esc(licence.raw || 'keine gefunden')}${
         permits ? ' — Verkauf gedeckt' : ''
-      }${listing.licenseOverridden ? '<br><strong>Eigene Rechte geltend gemacht</strong>' : ''}
+      }${listing.licenseOverridden ? '<br><strong>Eigene Rechte geltend gemacht</strong>' : ''}${
+        listing.etsyDesignRiskAccepted
+          ? `<br><strong>Etsy-Eigendesign-Risiko übernommen</strong> am ${esc(
+              listing.etsyDesignRiskAccepted.at.slice(0, 10),
+            )} — Behauptung, keine geprüfte Bedingung`
+          : ''
+      }
     </p>
-    ${rights}
+    ${form}
   </div>`
 }
 
@@ -962,16 +1001,22 @@ export function listingDetail({
               bekommen — dafür bräuchte es Beenden+Neueinstellen, und das macht dieses Tool nicht.</p>
           </div>
 
-          <div class="card${listing.ownDesign ? '' : ' locked'}">
+          <div class="card${listing.ownDesign || listing.etsyDesignRiskAccepted ? '' : ' locked'}">
             <h3>Etsy · Englisch</h3>
             ${
               listing.ownDesign
                 ? ''
-                : `<p class="lockbar">Für dieses Inserat gesperrt. Etsy verlangt seit dem 10.06.2025, dass Artikel
+                : listing.etsyDesignRiskAccepted
+                  ? `<p class="lockbar">Läuft auf deiner protokollierten Risiko-Übernahme vom
+                       ${esc(listing.etsyDesignRiskAccepted.at.slice(0, 10))} — einer Behauptung, keiner geprüften
+                       Bedingung. Etsy kann das Inserat unter den Creativity Standards entfernen; Gebühren bleiben.
+                       Zurücknehmen unter „Herkunft und Rechte".</p>`
+                  : `<p class="lockbar">Für dieses Inserat gesperrt. Etsy verlangt seit dem 10.06.2025, dass Artikel
                      nach einem <strong>eigenen Entwurf</strong> gefertigt sind — dieses Modell stammt von
                      ${esc(listing.source.designer)}. Eine kommerzielle Lizenz ändert daran nichts: Etsy fragt nach
                      Urheberschaft, nicht nach Nutzungsrechten. Der Text lässt sich bearbeiten, veröffentlichen
-                     nicht. eBay kennt diese Einschränkung nicht.</p>`
+                     nicht. eBay kennt diese Einschränkung nicht. Wer das Plattformrisiko bewusst tragen will:
+                     Schalter unter „Herkunft und Rechte".</p>`
             }
             <label for="etsyTitle">Titel <span class="counter" id="c-etsy"></span></label>
             <input class="field" id="etsyTitle" name="etsyTitle" data-limit="140" data-counter="c-etsy"

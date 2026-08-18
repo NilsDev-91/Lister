@@ -136,6 +136,12 @@ program
     "You designed this model yourself. Required for Etsy, which since 10.06.2025 only accepts a seller's own designs.",
     false,
   )
+  .option(
+    '--i-accept-etsy-design-risk',
+    'Unlock Etsy for this third-party design anyway. Records that YOU carry the platform risk under ' +
+      "Etsy's Creativity Standards — a commercial licence does not answer that question. Per listing, logged with time and source.",
+    false,
+  )
   .option('-y, --yes', 'Skip confirmation prompts', false)
   .action(async (opts) => {
     await createCommand({
@@ -155,6 +161,7 @@ program
       commercialRights: opts.iHaveCommercialRights,
       credit: opts.credit,
       ownDesign: opts.ownDesign,
+      acceptEtsyDesignRisk: opts.iAcceptEtsyDesignRisk,
       yes: opts.yes,
     })
   })
@@ -503,6 +510,13 @@ program
     log.step(`${listing.id} — ${listing.source.title}`)
     log.detail(`Source: ${listing.sourceUrl}`)
     log.detail(`Licence: ${listing.source.license.raw} (commercial use: ${listing.source.license.commercialUse})`)
+    if (listing.licenseOverridden) log.detail('Rights: sale rights asserted by you (override)')
+    if (listing.etsyDesignRiskAccepted) {
+      log.warn(
+        `Etsy design risk accepted by you on ${listing.etsyDesignRiskAccepted.at} — ` +
+          'an assertion, not a verified condition.',
+      )
+    }
     log.blank()
     log.step('eBay (German)')
     log.info(listing.copy.ebay.title)
