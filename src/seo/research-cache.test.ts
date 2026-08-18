@@ -137,3 +137,24 @@ describe('disk roundtrip', () => {
     expect(cache.readSearchCache(key, NOW)).toBeNull()
   })
 })
+
+describe('dead-entry sweep', () => {
+  const swept: SearchResult = { query: 'x', totalMatches: 1, listings: [], aspectFacets: [] }
+
+  it('a later write removes expired entries and key-change orphans', async () => {
+    const keyOld = cache.cacheKey({ marketplace: 'etsy', query: 'orphaned entry', limit: 50 })
+    cache.writeSearchCache(keyOld, swept, NOW)
+
+    // 25 h later a different query writes — the sweep must take the stale
+    // entry with it, because nothing will ever read it again.
+    const later = new Date(NOW.getTime() + 25 * 3_600_000)
+    const keyNew = cache.cacheKey({ marketplace: 'etsy', query: 'fresh entry', limit: 50 })
+    cache.writeSearchCache(keyNew, swept, later)
+
+    const { readdirSync } = await import('node:fs')
+    const files = readdirSync(join(dir, 'research-cache'))
+    expect(files.some((f) => f.includes('orphaned_entry'))).toBe(false)
+    expect(files.some((f) => f.includes('fresh_entry'))).toBe(true)
+    expect(cache.readSearchCache(keyNew, later)).not.toBeNull()
+  })
+})

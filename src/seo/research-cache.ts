@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { DATA_DIR } from '../util/paths.js'
@@ -118,10 +118,37 @@ export function readSearchCache(key: string, now: Date, ttlHours = TTL_HOURS): C
   }
 }
 
+/**
+ * Removes entries nothing will ever read again: expired ones, and orphans a
+ * key-format change left behind (their key never recomputes, so they would
+ * pile up forever). Runs opportunistically on writes; the directory holds a
+ * few dozen small files at most. Temp files (`*.json.tmp.<pid>`) are spared —
+ * a concurrent writer may own them.
+ */
+function sweepDeadEntries(now: Date): void {
+  for (const file of readdirSync(CACHE_DIR)) {
+    if (!file.endsWith('.json')) continue
+    const path = join(CACHE_DIR, file)
+    try {
+      const entry = JSON.parse(readFileSync(path, 'utf8')) as CacheEntry
+      if (typeof entry?.fetchedAt === 'string' && isFresh(entry, now)) continue
+    } catch {
+      // Unreadable is as dead as expired — writes are atomic, so this is not
+      // a torn write in progress.
+    }
+    try {
+      unlinkSync(path)
+    } catch {
+      // Locked or already gone — the next write sweeps again.
+    }
+  }
+}
+
 /** Best effort. A cache that cannot be written must not fail the research. */
 export function writeSearchCache(key: string, result: SearchResult, now: Date, notes: string[] = []): void {
   try {
     mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 })
+    sweepDeadEntries(now)
     const path = pathFor(key)
     const entry: CacheEntry = { fetchedAt: now.toISOString(), result, notes }
     // Locked and rename-replaced like every other write here: the CLI and the
