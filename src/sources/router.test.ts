@@ -10,6 +10,10 @@ describe('the URL router', () => {
     const cults = parseModelUrl('https://cults3d.com/de/modell-3d/gadget/flexi-turtle')
     expect(cults.platform).toBe('CULTS3D')
     expect(cults.externalId).toBe('flexi-turtle')
+
+    const printables = parseModelUrl('https://www.printables.com/model/3161-3d-benchy')
+    expect(printables.platform).toBe('PRINTABLES')
+    expect(printables.externalId).toBe('3161')
   })
 
   it('accepts subdomains but not lookalike hosts', () => {
@@ -23,13 +27,13 @@ describe('the URL router', () => {
     // The hint travels on the UserError's own field, not in the message.
     let thrown: unknown
     try {
-      parseModelUrl('https://www.printables.com/model/3161-3d-benchy')
+      parseModelUrl('https://www.thingiverse.com/thing:763622')
     } catch (error) {
       thrown = error
     }
     expect(thrown).toBeInstanceOf(Error)
-    expect((thrown as Error).message).toMatch(/No adapter for www\.printables\.com/)
-    expect((thrown as { hint?: string }).hint).toMatch(/MakerWorld, Cults3D/)
+    expect((thrown as Error).message).toMatch(/No adapter for www\.thingiverse\.com/)
+    expect((thrown as { hint?: string }).hint).toMatch(/MakerWorld, Cults3D, Printables/)
   })
 
   it('is a loud error for a non-URL, not a fallback', () => {
@@ -41,12 +45,15 @@ describe('the URL router', () => {
     // platform's own message.
     expect(() => parseModelUrl('https://makerworld.com/en/@TinkerFox')).toThrow(/MakerWorld model URL/)
     expect(() => parseModelUrl('https://cults3d.com/en/users/kendofuji/creations')).toThrow(/Cults3D model URL/)
+    expect(() => parseModelUrl('https://www.printables.com/@PrusaResearch')).toThrow(/Printables model URL/)
   })
 
   it('refuses a saved page for platforms read through an API', async () => {
     // A file the user attached on purpose is either used or named as the
     // mistake it is — never silently ignored.
     await expect(readModelFromFile('/tmp/page.html', 'https://cults3d.com/en/3d-model/gadget/flexi-turtle'))
+      .rejects.toThrow(/only for MakerWorld/)
+    await expect(readModelFromFile('/tmp/page.html', 'https://www.printables.com/model/3161'))
       .rejects.toThrow(/only for MakerWorld/)
   })
 

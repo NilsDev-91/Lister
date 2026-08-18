@@ -2,6 +2,7 @@ import { UserError } from '../util/log.js'
 import type { Platform, SourceModel } from '../types.js'
 import * as makerworld from './makerworld/fetcher.js'
 import * as cults3d from './cults3d/fetcher.js'
+import * as printables from './printables/fetcher.js'
 
 /**
  * The one place that turns a pasted URL into a platform and its adapter.
@@ -46,6 +47,15 @@ const ADAPTERS: ReadonlyArray<readonly [Platform, SourceAdapter]> = [
       fetchModel: cults3d.fetchModel,
     },
   ],
+  [
+    'PRINTABLES',
+    {
+      label: 'Printables',
+      hosts: /(^|\.)printables\.com$/i,
+      parseModelUrl: printables.parseModelUrl,
+      fetchModel: printables.fetchModel,
+    },
+  ],
 ]
 
 function supportedHosts(): string {
@@ -66,7 +76,7 @@ function adapterFor(input: string): { platform: Platform; adapter: SourceAdapter
   if (!hit) {
     throw new UserError(
       `No adapter for ${hostname}.`,
-      `Supported platforms: ${supportedHosts()}. Printables is coming; other hosts are deliberately not guessed at.`,
+      `Supported platforms: ${supportedHosts()}. Other hosts are deliberately not guessed at.`,
     )
   }
   return { platform: hit[0], adapter: hit[1] }

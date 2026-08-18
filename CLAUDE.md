@@ -11,7 +11,10 @@ deliberate — verify against it before treating behaviour as a bug.
   with a second fee — recover by inspecting remote state, never by re-running.
 - Selling needs either a licence that provably permits it or an explicit
   rights assertion from the seller. An unknown or unparseable licence blocks
-  the publish; drafting stays allowed.
+  the publish; drafting stays allowed. (The web create form pre-selects the
+  assertion checkbox — a deliberate, documented decision; see ARCHITECTURE.md
+  Nachtrag 2026-08-18 (4). It stays a per-creation choice, never stored
+  config.)
 - Etsy own-design is default-deny with exactly one way through: the recorded
   per-listing risk acceptance (`etsyDesignRiskAccepted`, stored with time and
   source URL). It unlocks only that gate — never the licence rules or media

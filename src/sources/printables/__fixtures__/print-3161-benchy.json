@@ -1,0 +1,42 @@
+{
+ "data": {
+  "print": {
+   "id": "3161",
+   "slug": "3d-benchy",
+   "name": "3D BENCHY",
+   "summary": "Author: CreativeTools\r\n3DBenchy is a 3D model specifically designed for testing and benchmarking 3D printers.",
+   "description": "<h3>Update: <a href=\"https://www.nti-group.com/home/information/news/3dbenchy/\">The Iconic 3DBenchy Enters the Public Domain</a></h3><p><br><br>Author: CreativeTools</p><p>3DBenchy is a 3D model specifically designed for testing and benchmarking 3D printers. It is a small recognizable object that you can download for free, make and share.</p><p><a href=\"http://www.3dbenchy.com/\">http://www.3dbenchy.com/</a></p><h3>Print instructions</h3><p>Maybe you have seen on some prints the infamous Benchy hull line. We eliminated that in our presliced gcode. Check the article, how we did that.<br><a href=\"https://help.prusa3d.com/en/article/the-benchy-hull-line_124745\">The Benchy hull line</a></p>",
+   "user": {
+    "publicUsername": "Prusa Research"
+   },
+   "tags": [
+    {
+     "name": "boat"
+    },
+    {
+     "name": "test"
+    },
+    {
+     "name": "benchy"
+    },
+    {
+     "name": "testmodel"
+    }
+   ],
+   "images": [
+    {
+     "filePath": "media/prints/3161/images/20206_70fde6a0-6da1-4522-ba46-25f1bece7199/benchy.jpg"
+    },
+    {
+     "filePath": "media/prints/3161/images/20205_d6fc9f43-aa8d-466d-8f44-e0d20fe84f01/benchy-02.jpg"
+    }
+   ],
+   "license": {
+    "id": "7",
+    "name": "Creative Commons — Public Domain",
+    "disallowRemixing": false
+   },
+   "datePublished": "2025-02-14T09:26:10+00:00"
+  }
+ }
+}

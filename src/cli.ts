@@ -36,7 +36,7 @@ function parseEuroNumber(value: string): number {
 
 program
   .name('lister')
-  .description('Turn a model page (MakerWorld, Cults3D) into eBay and Etsy listings, with Claude writing the copy.')
+  .description('Turn a model page (MakerWorld, Cults3D, Printables) into eBay and Etsy listings, with Claude writing the copy.')
   .version('0.1.0')
 
 // ---------------------------------------------------------------------------
@@ -105,11 +105,11 @@ program
 
 program
   .command('create')
-  .description('Build a draft listing from a model URL (MakerWorld or Cults3D)')
-  .requiredOption('-u, --url <url>', 'Model URL on makerworld.com or cults3d.com')
+  .description('Build a draft listing from a model URL (MakerWorld, Cults3D or Printables)')
+  .requiredOption('-u, --url <url>', 'Model URL on makerworld.com, cults3d.com or printables.com')
   .option(
     '--from-html <file>',
-    'MakerWorld only: parse a page you saved from the browser. MakerWorld blocks direct fetches, so this is the reliable route there. Cults3D is read through its API and needs no file.',
+    'MakerWorld only: parse a page you saved from the browser. MakerWorld blocks direct fetches, so this is the reliable route there. Cults3D and Printables are read through their APIs and need no file.',
   )
   .requiredOption('-p, --price <eur>', 'Selling price in EUR', parseEuroNumber)
   .requiredOption('-m, --material <name>', 'Print material, e.g. PLA or PETG')

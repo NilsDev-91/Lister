@@ -1,12 +1,17 @@
 # 3d-print-lister
 
-Turn a MakerWorld model page into eBay and Etsy listings, with Claude writing the copy.
+Turn a model page (MakerWorld, Cults3D or Printables) into eBay and Etsy
+listings, with Claude writing the copy.
 
 ```bash
 lister create --url https://makerworld.com/en/models/1029890-flexi-octopus \
               --from-html ./saved-page.html \
               --price 24.90 --material PETG --colour Petrol \
               --dimensions 220x60x30 --weight 120
+
+# Cults3D and Printables are read through their APIs — no saved page needed:
+lister create --url https://cults3d.com/en/3d-model/gadget/flexi-turtle \
+              --price 24.90 --material PETG
 
 lister publish mw-1029890-a1b2c3 --marketplace etsy --draft
 ```
@@ -15,7 +20,10 @@ lister publish mw-1029890-a1b2c3 --marketplace etsy --draft
 
 ## What it does
 
-1. Reads a MakerWorld model page — title, description, images, designer, licence.
+1. Reads a model page — title, description, images, designer, licence.
+   MakerWorld is parsed from a browser-saved page (Cloudflare); Cults3D
+   (API key required, see `.env.example`) and Printables come through their
+   GraphQL APIs.
 2. **Checks the licence** and decides whether the designer's images and text may be reused.
 3. Asks Claude for marketplace-native copy — German for both, written natively
    for each rather than translated (the shop ships within Germany only; see

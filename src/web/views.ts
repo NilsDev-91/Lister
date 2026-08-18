@@ -309,16 +309,16 @@ export function newListingForm(error?: string, settings: Settings = DEFAULT_SETT
         <div>
           <div class="card">
             <h3>Modell</h3>
-            <label for="url">Modell-URL (MakerWorld oder Cults3D)</label>
+            <label for="url">Modell-URL (MakerWorld, Cults3D oder Printables)</label>
             <input class="field" id="url" name="url" required
-                   placeholder="https://makerworld.com/de/models/… oder https://cults3d.com/de/modell-3d/…">
+                   placeholder="https://makerworld.com/de/models/… · cults3d.com · printables.com">
             <div id="page-field">
               <div class="gap"></div>
               <label for="page">Gespeicherte Seite (HTML) — nur für MakerWorld</label>
               <input class="field" id="page" name="page" type="file" accept=".html,.htm">
               <p class="note">MakerWorld blockiert direkte Abrufe über Cloudflare.
                  Seite im Browser mit Strg+S sichern und hier hochladen — das ist der verlässliche Weg.
-                 Cults3D wird über die API gelesen und braucht keine Datei.</p>
+                 Cults3D und Printables werden über ihre APIs gelesen und brauchen keine Datei.</p>
             </div>
           </div>
 

@@ -10,9 +10,10 @@
 
 ## Was das Tool tut
 
-Aus einer MakerWorld-Modellseite wird ein Inserat auf eBay und Etsy:
-Seite einlesen → Lizenz prüfen → Claude schreibt die Texte → Bilder aufbereiten
-→ Preflight → veröffentlichen. Node/TypeScript, CLI **und** lokale Web-UI.
+Aus einer Modellseite (MakerWorld, Cults3D oder Printables) wird ein Inserat
+auf eBay und Etsy: Seite/API einlesen → Lizenz prüfen → Claude schreibt die
+Texte → Bilder aufbereiten → Preflight → veröffentlichen. Node/TypeScript,
+CLI **und** lokale Web-UI.
 
 Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 
@@ -53,6 +54,10 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Varianten-Editor | fertig: Textzeilen `SKU; Farbe; Preis; Menge` (Semikolon wegen Dezimalkomma), Fehler pro Zeile, Roundtrip live geprüft |
 | Recherche-Cache | fertig, **live E2E geprüft** (17.08.): Suchergebnisse 24 h auf Platte, `--fresh` umgeht ihn; Wiederholungslauf = 0 Quota, Kennzeichnung „(cache)" + Notiz in der Evidenz |
 | Etsy-API-ToS | gelesen und dokumentiert (`docs/research/etsy-api-terms.md`): Recherche ist **Grauzone**, Cache + Aggregat-only sind die Verteidigung |
+| URL-Router (Mehrplattform) | fertig (`sources/router.ts`): Hostname → Adapter, unbekannter Host = lauter Fehler; Formular nimmt nackte URLs, Datei-Feld nur noch für MakerWorld — **im Browser geprüft** |
+| Cults3D-Adapter | fertig: GraphQL live introspektiert, Modell-Query + Lizenzkatalog **gegen die echte API verifiziert** (Fixtures verbatim), Smoke-Test gelaufen; Lizenztabelle vollständig (14 Einträge) |
+| Printables-Adapter | fertig: Endpunkt öffentlich, Introspection deaktiviert — Felder per Fehler-Probing **live verifiziert** (inkl. Lizenzkatalog, 22 Einträge), Smoke-Test gelaufen |
+| Formular-E2E neue Quellen | **beide live durchgespielt**: Cults3D → Entwurf `c3d-flexi-turtle-9770ca`, Printables → `prn-3161-c96d60`, jeweils ohne Datei, mit Texten, Merkmalen, Referenzbildern und laufendem Preflight. (Cults3D-Lauf fiel in einen Opus-Ausfall und lief über `LISTER_MODEL=claude-sonnet-5` — gleicher Codepfad; Printables danach mit dem Opus-Default.) |
 
 425 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
 `npm test && npm run build` läuft sauber.
@@ -88,9 +93,11 @@ src/
   cli.ts                    Commander-Einstieg: auth whoami create preflight
                             keywords proposal titles aspects publish revise
                             ui list show delete
-  config.ts                 .env-Laden, Zugangsdaten, SELLER_* (GPSR,
-                            Längen-Limits werden erzwungen)
+  config.ts                 .env-Laden, Zugangsdaten (auch CULTS3D_*), SELLER_*
+                            (GPSR, Längen-Limits werden erzwungen)
   types.ts                  zod-Schemas = die Wahrheit über Datenformen;
+                            SourceModelSchema (platform, externalId) inkl.
+                            Altdaten-Migration designId→externalId;
                             auch EbaySkuSchema + EbayVariantsSchema
   proposal.ts               reiner Text-Diff, den CLI und UI gemeinsam zeigen
                             (inkl. der Kategorie-Hints — mergeCopy wendet sie an)
@@ -100,11 +107,20 @@ src/
                             importieren types.ts und seo/types.ts sich im Kreis
   images.ts                 Bild-Staging (eBay=URLs, Etsy=Dateien)
 
-  makerworld/
-    fetcher.ts              __NEXT_DATA__-Parser + gespeicherte HTML lesen;
-                            Challenge-Erkennung erst NACH dem Parse (⚠️ s.u.)
+  sources/
+    router.ts               DER Dispatcher: Hostname → Plattform → Adapter.
+                            Unbekannter Host = lauter UserError, kein Fallback;
+                            gespeicherte Seite nur für MakerWorld
     license.ts              Lizenz → darf verkauft/wiederverwendet werden?
-                            gate() nimmt 3 Argumente (Override, Bilder-Claim)
+                            gate() nimmt 3 Argumente (Override, Bilder-Claim);
+                            PLATTFORM-Tabellen (normaliseLicense verlangt die
+                            Plattform als Pflichtparameter, ⚠️ s.u.)
+    makerworld/fetcher.ts   __NEXT_DATA__-Parser + gespeicherte HTML lesen;
+                            Challenge-Erkennung erst NACH dem Parse (⚠️ s.u.)
+    cults3d/fetcher.ts      GraphQL (Basic Auth), creation(slug:) — Fixtures
+                            sind verbatim-Antworten der echten API
+    printables/fetcher.ts   GraphQL (ohne Auth, undokumentiert), print(id:) —
+                            Introspection ist aus, Felder per Probing belegt
   ai/composer.ts            Claude-Aufruf, Structured Outputs, Reparaturschleife
   seo/
     types.ts                gemeinsame Form für beide Marktplätze
@@ -165,6 +181,81 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-18 (4) — Mehrplattform-Quellen: Cults3D und Printables
+
+**Umbau in fünf Commits:** Rename-Naht (SourceModelSchema, `platform`-Feld,
+`designId`→`externalId` mit preprocess-Migration in types.ts — Altdaten parsen
+weiter, Test pinnt es), Lizenztabelle pro Plattform, Cults3D-Adapter,
+URL-Router+Formular, Printables-Adapter. Die Web-UI blieb derselbe Pfad:
+`createCommand` dispatcht über `sources/router.ts`.
+
+**`normaliseLicense` verlangt die Plattform als Pflichtparameter.** Mit einem
+MakerWorld-Default hätte ein Adapter, der das Argument vergisst, still
+MakerWorlds Tabelle geerbt — deren nacktes `BY` macht aus einem fremden
+Lizenzstring ein unbemerktes Commercial-yes. Pflichtparameter = Compile-Fehler
+statt Konvention (Compliance-Review-Fund).
+
+**Eine Verkaufslizenz ist keine Medienlizenz — jetzt auch in `gate()`.**
+Cults3Ds CU erlaubt laut Lizenztext (cults3d.com/en/licenses, 2026-08-18
+gelesen) „print, sell and distribute 3D prints", sagt aber **nichts** über
+Fotos/Beschreibung des Designers. Der yes-Zweig von gate() gibt Seitenmedien
+deshalb nur noch für die CC-Familie automatisch frei (`/^CC(0|-BY)/` am Code);
+sale-only-Lizenzen brauchen die separate Bilder-Behauptung
+(`sourceImagesLicensed`, wirkt jetzt auch ohne Override — die Seitenlizenz IST
+die Verkaufsgrundlage), Text bleibt zu. MakerWorld-Verhalten byte-identisch
+(alle yes-Einträge sind CC). Die Rechte-Karte zeigt die Bilder-Box auch im
+yes-ohne-Medien-Fall — sonst wäre die Regel UI-unerreichbar gewesen.
+Preflight: `SOURCE_MEDIA_HOSTS` blockt jetzt auch cults3d.com-CDNs.
+
+**Cults3D (`https://cults3d.com/graphql`, HTTP Basic `user:api_key`):**
+- **Auth ist Pflicht schon für die Introspection** (401 ohne). Key selbst
+  erzeugen unter cults3d.com/en/api/keys; ~60 Anfragen/30 s, ~500/Tag.
+- `licenses { code name spdxId allowsCommercialUse }` liefert den ganzen
+  Katalog — die Tabelle ist daran verifiziert (Fixture verbatim).
+- ⚠️ **`allowsCommercialUse` widerspricht zweimal dem Lizenztext:** CC0 steht
+  auf `false`, obwohl `spdxId: CC0-1.0` (Totalverzicht — Tabelle sagt yes,
+  konsistent mit MakerWorld; plausible Erklärung: französisches droit moral).
+  GPL/LGPL/CERN-OHL ebenfalls `false`, deren Texte erlauben Kommerz unter
+  Bedingungen — ob die ein GEDRUCKTES Objekt binden, ist ungeklärt →
+  Tabelle sagt `unknown`, also Prompt.
+- `creation(slug:)` — der Slug ist das letzte URL-Segment und locale-frei.
+  Alle zehn Locale-URL-Formen enthalten „3d" im zweiten Segment
+  (`3d-model`, `modell-3d`, `modèle-3d`, `3d-moderu`, `3d-móxíng` …) — das
+  unterscheidet Modell- von Profil-URLs. `url(locale: EN)` wird als
+  kanonische sourceUrl gespeichert (Duplikatwarnung über Locales hinweg).
+- ⚠️ **`illustrations.imageUrl` liefert maximal 516×516**, auch mit
+  `version: LARGE` — eBays 500-px-Minimum wird knapp erfüllt. Plattformgrenze.
+- Unbekannter Slug → `creation: null` mit HTTP 200, kein Fehlerobjekt.
+
+**Printables (`https://api.printables.com/graphql/`, ohne Auth):**
+- **Introspection ist deaktiviert** — unbekannte Felder scheitern aber als
+  benannte GraphQL-Fehler, so wurden `tags { name }`, `license.name` und die
+  `licenses`-Query verifiziert (die 100prznt-Vorlage kennt nur
+  `license { id disallowRemixing }`; die Antworten liegen verbatim als
+  Fixtures).
+- `licenses` enumeriert **22** Lizenzen. Auffällig: Prusas **Open Community
+  License**-Familie (7 Varianten) ist für Hardware geschrieben — Betrieb eines
+  Geschäfts ja, aber ob der VERKAUF gedruckter Kopien gedeckt ist, ist selbst
+  unter Juristen strittig → alle `unknown`. „Standard Digital File License"
+  gibt es auch hier (personal-use only, nicht Bambu-exklusiv). „Commercial
+  Use"/„… No Derivative" sind sale-only wie Cults CU.
+- `images[].filePath` ist relativ zu `https://media.printables.com/`
+  (live verifiziert, volle Auflösung — 6,7 MB beim Benchy-Cover).
+- **`description` ist HTML** — der Adapter strippt zu Prosa, bevor es zum
+  Texter geht.
+- Die Webseite selbst blockt curl (403) — egal, die API ist der Weg.
+
+**Formular: `commercialRights` ist vorausgewählt — bewusste Entscheidung des
+Nutzers** (Arbeitsauftrag 18.08.), dokumentierte Nebenwirkung inklusive: Auch
+Inserate unter ohnehin erlaubter Lizenz (CC-BY, CC0) entstehen im Web-Fluss
+mit `licenseOverridden=true` und laufen in der Override-Semantik (Lizenz darf
+nicht im Text stehen, Medien nur per Bilder-Behauptung). Wer das nicht will,
+nimmt den Haken im Formular raus — pro Anlage, kein globaler Zustand.
+
+**Listing-ids sind plattformpräfixiert** (`mw-`/`c3d-`/`prn-`), Slugs werden
+SKU-sicher geklemmt (Charset-Sweep, ≤47 von 50 Zeichen) — die id ist der
+eBay-SKU-Fallback und Cults-Slugs sind freie Strings.
 
 ## Nachtrag 2026-08-18 (3) — Etsy-Texte sind jetzt deutsch
 

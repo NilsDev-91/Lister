@@ -173,20 +173,115 @@ function cults3dLicenses(): Record<string, LicenseEntry> {
 }
 
 /**
+ * Printables' licence catalog, verified against the live `licenses` query on
+ * 2026-08-18 (fixture: printables/__fixtures__/licenses.json). Keyed by the
+ * exact display name — em-dashes and doubled spaces included, because that is
+ * what the API sends and what the adapter passes through.
+ *
+ * The `unknown` block is deliberate: Prusa's Open Community License family is
+ * written for hardware designs — it permits running a business on them, but
+ * whether that covers *selling printed copies of the design* is contested
+ * even among lawyers, and the plugin modules (Micro Business, R&D, GAtt)
+ * change conditions, not that question. GPL/LGPL/CERN carry the same
+ * print-coverage doubt as on Cults3D. All of those route to the prompt.
+ */
+function printablesLicenses(): Record<string, LicenseEntry> {
+  const OCL_NOTE =
+    "Prusa's Open Community License is written for hardware designs: it permits building a business on them, but whether selling printed copies of the design is covered is contested. Decide deliberately."
+  const GPL_NOTE =
+    'The licence permits commercial use of the files under copyleft conditions, but whether those conditions bind a printed object is unsettled. Decide deliberately.'
+
+  const entries: [name: string, entry: LicenseEntry][] = [
+    ['Creative Commons — Public Domain', {
+      code: 'CC0-1.0',
+      commercial: 'yes',
+      note: 'Public domain: commercial use is permitted and no attribution is required.',
+    }],
+    ['Creative Commons — Attribution', {
+      code: 'CC-BY-4.0',
+      commercial: 'yes',
+      note: 'Attribution required.',
+    }],
+    ['Creative Commons — Attribution  — Share Alike', {
+      code: 'CC-BY-SA-4.0',
+      commercial: 'yes',
+      note: 'Attribution required. ShareAlike governs derivative models, not the sale of a print.',
+    }],
+    ['Creative Commons — Attribution — NoDerivatives', {
+      code: 'CC-BY-ND-4.0',
+      commercial: 'yes',
+      note: 'Attribution required. You may sell prints of the model as published, but not of a modified version.',
+    }],
+    ['Creative Commons — Attribution  — Noncommercial', {
+      code: 'CC-BY-NC-4.0',
+      commercial: 'no',
+      note: 'The NonCommercial term forbids selling prints.',
+    }],
+    ['Creative Commons — Attribution  — Noncommercial  —  Share Alike', {
+      code: 'CC-BY-NC-SA-4.0',
+      commercial: 'no',
+      note: 'The NonCommercial term forbids selling prints.',
+    }],
+    ['Creative Commons — Attribution  — Noncommercial  —  NoDerivatives', {
+      code: 'CC-BY-NC-ND-4.0',
+      commercial: 'no',
+      note: 'The NonCommercial term forbids selling prints.',
+    }],
+    ['GNU General Public License v2.0', { code: 'GPL-2.0', commercial: 'unknown', note: GPL_NOTE }],
+    ['GNU General Public License v3.0', { code: 'GPL-3.0', commercial: 'unknown', note: GPL_NOTE }],
+    ['GNU Lesser General Public License', { code: 'LGPL', commercial: 'unknown', note: GPL_NOTE }],
+    ['BSD License', {
+      code: 'BSD',
+      commercial: 'yes',
+      note: 'The BSD License permits commercial use; keep the licence notice with the design files.',
+    }],
+    ['Standard Digital File License', {
+      code: 'SDFL',
+      commercial: 'no',
+      note: 'The Standard Digital File License is personal-use only.',
+    }],
+    ['Commercial Use - No Derivative', {
+      code: 'PRINTABLES-CU-ND',
+      commercial: 'yes',
+      note: 'Commercial use of the design as published — derivatives are not covered.',
+    }],
+    ['Commercial Use', {
+      code: 'PRINTABLES-CU',
+      commercial: 'yes',
+      note: "The platform's Commercial Use licence permits selling prints.",
+    }],
+    ['Open Community License v1', { code: 'PRUSA-OCL-1.0', commercial: 'unknown', note: OCL_NOTE }],
+    ['Open Community License v1.1', { code: 'PRUSA-OCL-1.1', commercial: 'unknown', note: OCL_NOTE }],
+    ['Open Community License v1.1 + General Attribution v1', { code: 'PRUSA-OCL-1.1-GATT', commercial: 'unknown', note: OCL_NOTE }],
+    ['Open Community License v1.1 + Research & Development v1', { code: 'PRUSA-OCL-1.1-RND', commercial: 'unknown', note: OCL_NOTE }],
+    ['Open Community License v1.1 + Micro Business v1', { code: 'PRUSA-OCL-1.1-MICRO', commercial: 'unknown', note: OCL_NOTE }],
+    ['Open Community License v1.1 + GAtt v1 + Micro v1', { code: 'PRUSA-OCL-1.1-GATT-MICRO', commercial: 'unknown', note: OCL_NOTE }],
+    ['Open Community License v1.1 + GAtt v1 + RnD v1', { code: 'PRUSA-OCL-1.1-GATT-RND', commercial: 'unknown', note: OCL_NOTE }],
+    ['CERN Open Hardware Licence Version 2 - Strongly Reciprocal', {
+      code: 'CERN-OHL-S-2.0',
+      commercial: 'unknown',
+      note: 'The CERN OHL permits commercial manufacture under documentation conditions; whether they reach a printed object is unsettled. Decide deliberately.',
+    }],
+  ]
+
+  const table: Record<string, LicenseEntry> = {}
+  for (const [name, entry] of entries) table[name.toLowerCase()] = entry
+  return table
+}
+
+/**
  * Each platform speaks its own licence vocabulary, so the exact-match lookup
  * is per platform: MakerWorld's bare `BY-NC` must not be assumed to mean the
  * same thing when a different platform emits it — an unrecognised value routes
  * to `unknown`, which prompts the user instead of silently deciding.
  *
  * Entries are added only once they have been verified against a real API
- * response from that platform (see the adapters' fixtures). Until then a
- * platform's table is empty and everything it emits outside the universal
- * Creative Commons spellings resolves to `unknown` — the safe direction.
+ * response from that platform (see the adapters' fixtures).
  */
 const PLATFORM_LICENSES: Record<Platform, Record<string, LicenseEntry>> = {
   MAKERWORLD: MAKERWORLD_LICENSES,
   CULTS3D: cults3dLicenses(),
-  PRINTABLES: {},
+  PRINTABLES: printablesLicenses(),
 }
 
 /** Matches the abbreviation form and captures whatever follows "BY". */
@@ -367,7 +462,10 @@ export interface LicenseGateDecision {
  * `allowOverride` exists because the licence on the page is not always the whole
  * story — a designer may have granted a commercial licence separately, or you
  * may be listing your own model. The override is explicit and per-run, never
- * sticky, so it cannot silently become the default.
+ * sticky. One documented exception: the web create form PRE-SELECTS the
+ * assertion checkbox (deliberate user decision, 2026-08-18 — see
+ * ARCHITECTURE.md, Nachtrag 4); it remains a per-creation choice the seller
+ * can untick, never a stored default.
  */
 export function gate(
   license: LicenseInfo,
