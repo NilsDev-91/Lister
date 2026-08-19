@@ -16,5 +16,8 @@ tokens.json
 tmp/
 .cache/
 
+# Local test assets (real sliced 3MFs — user's own prints, not repo content)
+testdata/
+
 # Machine-specific Claude Code settings (permissions, local paths)
 .claude/settings.local.json

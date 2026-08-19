@@ -20,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.0",
     "commander": "^14.0.1",
+    "fflate": "^0.8.3",
     "node-html-parser": "^7.0.1",
     "open": "^10.2.0",
     "zod": "^4.1.12"
