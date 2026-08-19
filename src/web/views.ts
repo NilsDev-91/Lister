@@ -167,7 +167,7 @@ export function overview(listings: ListingRecord[], flash?: { kind: string; text
       nav: 'overview',
       counts: { live: 0, drafts: 0 },
       body: `
-      ${flash ? banner(flash) : ''}
+      ${flash ? toast(flash) : ''}
       <div class="card empty">
         <p>Noch keine Inserate.</p>
         <a class="btn" href="/new">Erstes Inserat anlegen</a>
@@ -180,7 +180,7 @@ export function overview(listings: ListingRecord[], flash?: { kind: string; text
     nav: 'overview',
     counts: { live: live.length, drafts: drafts.length },
     body: `
-    ${flash ? banner(flash) : ''}
+    ${flash ? toast(flash) : ''}
     <div class="actions" style="margin-bottom:1.1rem">
       <a class="btn" href="/new">Neues Inserat</a>
       <span class="note">${listings.length} gespeichert</span>
@@ -192,6 +192,20 @@ export function overview(listings: ListingRecord[], flash?: { kind: string; text
 
 function banner(flash: { kind: string; text: string }): string {
   return `<div class="banner ${esc(flash.kind)}">${esc(flash.text)}</div>`
+}
+
+/**
+ * Status after an action, as an overlay on the current view.
+ *
+ * Every button on these pages posts and reloads, and a banner at the top of
+ * the document meant every "Bild entfernt." yanked the page to the top. The
+ * toast floats over the viewport instead — the scroll position script in
+ * assets.ts keeps the view where it was. `ok` disappears on its own after two
+ * seconds, `warn` lingers, `bad` stays until clicked: an error that vanishes
+ * unread is an error that gets repeated.
+ */
+function toast(flash: { kind: string; text: string }): string {
+  return `<div class="toast ${esc(flash.kind)}" data-toast>${esc(flash.text)}</div>`
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +256,7 @@ export function settingsPage({ groups, settings, counts, flash }: SettingsData):
     nav: 'settings',
     counts,
     body: `
-    ${flash ? banner(flash) : ''}
+    ${flash ? toast(flash) : ''}
     <div class="split">
       <div>
         <form method="post" action="/settings">
@@ -1065,7 +1079,7 @@ export function listingDetail({
     nav: 'overview',
     ...(counts ? { counts } : {}),
     body: `
-    ${flash ? banner(flash) : ''}
+    ${flash ? toast(flash) : ''}
     <div class="split">
       <div>
         ${proposalPanel(listing)}

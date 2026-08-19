@@ -300,6 +300,15 @@ textarea { min-height:8rem; resize:vertical; line-height:1.5; }
 .banner.bad { background:#3a201c; border:1px solid var(--bad); color:#f6d2cb; }
 .banner.ok { background:#22301d; border:1px solid var(--ok); color:#dbeacf; }
 .banner.warn { background:#332a19; border:1px solid var(--warn); color:#f0e0c2; }
+/* Action feedback floats over the view instead of pushing the page around. */
+.toast { position:fixed; top:.8rem; left:50%; transform:translateX(-50%); z-index:60;
+         max-width:min(90vw, 34rem); border-radius:var(--radius); padding:.7rem 1rem;
+         font-size:.88rem; box-shadow:0 6px 24px rgba(0,0,0,.45); cursor:pointer;
+         transition:opacity .3s ease; }
+.toast.gone { opacity:0; }
+.toast.bad { background:#3a201c; border:1px solid var(--bad); color:#f6d2cb; }
+.toast.ok { background:#22301d; border:1px solid var(--ok); color:#dbeacf; }
+.toast.warn { background:#332a19; border:1px solid var(--warn); color:#f0e0c2; }
 
 .empty { text-align:center; padding:3rem 1rem; color:var(--dim); }
 
@@ -511,6 +520,37 @@ if (aspects) {
     });
   }
 }
+
+// Action feedback: "ok" fades after two seconds, "warn" after six, "bad"
+// stays until clicked — an error that vanishes unread is an error that gets
+// repeated. A click dismisses any of them immediately.
+const toast = document.querySelector('[data-toast]');
+if (toast) {
+  toast.addEventListener('click', () => toast.remove());
+  const ttl = toast.classList.contains('ok') ? 2000 : toast.classList.contains('warn') ? 6000 : null;
+  if (ttl) {
+    setTimeout(() => {
+      toast.classList.add('gone');
+      setTimeout(() => toast.remove(), 350);
+    }, ttl);
+  }
+}
+
+// Every action button posts and reloads, and a POST-redirect lands at the top
+// of the document — the "Bild entfernt" click three screens down snapped the
+// page back up. Remember where the view was and put it back, but only on the
+// page the submit happened on: carrying a scroll offset to a different page
+// would aim it at unrelated content.
+for (const form of document.querySelectorAll('form')) {
+  form.addEventListener('submit', () => {
+    sessionStorage.setItem('lister-scroll', JSON.stringify({ path: location.pathname, y: window.scrollY }));
+  });
+}
+try {
+  const saved = JSON.parse(sessionStorage.getItem('lister-scroll') || 'null');
+  sessionStorage.removeItem('lister-scroll');
+  if (saved && saved.path === location.pathname) window.scrollTo(0, saved.y);
+} catch { /* a broken entry is not worth an error */ }
 
 // The editor shares the page with a dozen little forms — Druckdaten, Titel,
 // Bilder, Rechte — and every one of their buttons reloads the page. Typed but
