@@ -512,6 +512,26 @@ if (aspects) {
   }
 }
 
+// The editor shares the page with a dozen little forms — Druckdaten, Titel,
+// Bilder, Rechte — and every one of their buttons reloads the page. Typed but
+// unsaved editor fields (an SKU, a title tweak) would vanish without a word:
+// the browser only submits the form whose button was pressed. The guard makes
+// that loss a question instead of a silence. Submitting the editor itself
+// clears the flag, so a normal save never warns.
+const guarded = document.querySelector('form[data-guard]');
+if (guarded) {
+  let dirty = false;
+  guarded.addEventListener('input', () => { dirty = true; });
+  guarded.addEventListener('change', () => { dirty = true; });
+  guarded.addEventListener('submit', () => { dirty = false; });
+  window.addEventListener('beforeunload', (e) => {
+    if (!dirty) return;
+    e.preventDefault();
+    // Chrome ignores custom text but requires returnValue to show the dialog.
+    e.returnValue = '';
+  });
+}
+
 // Anything that costs money asks first, with the amount in the question.
 for (const form of document.querySelectorAll('[data-confirm]')) {
   form.addEventListener('submit', (e) => {

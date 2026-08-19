@@ -150,7 +150,9 @@ describe('proposedValues', () => {
 
 describe('applyPrintData', () => {
   it('writes product facts, aspects and the per-field audit trail', async () => {
-    db.upsert(record('mw-apply-1'))
+    // A saved SKU rides along untouched — applying print data must never
+    // clear seller-entered fields it does not own.
+    db.upsert({ ...record('mw-apply-1'), sku: 'WW-TEST-01' })
     const { spec } = await printdata.attachPrintData({
       listingId: 'mw-apply-1',
       data: singlePlate(),
@@ -171,6 +173,7 @@ describe('applyPrintData', () => {
     expect(updated.product.colour).toBe('Grau')
     expect(updated.copy.ebay.aspects['Material']).toEqual(['PLA'])
     expect(updated.copy.ebay.aspects['Farbe']).toEqual(['Grau'])
+    expect(updated.sku, 'apply must not touch the seller-entered SKU').toBe('WW-TEST-01')
 
     for (const field of ['weightGrams', 'dimensionsMm', 'material', 'colour']) {
       const applied = updated.printApplied[field]

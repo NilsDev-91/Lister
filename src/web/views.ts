@@ -1069,7 +1069,7 @@ export function listingDetail({
     <div class="split">
       <div>
         ${proposalPanel(listing)}
-        <form method="post" action="/listing/${esc(listing.id)}">
+        <form method="post" action="/listing/${esc(listing.id)}" data-guard>
           <div class="card">
             <h3>eBay · Deutsch</h3>
             <label for="ebayTitle">Titel <span class="counter" id="c-ebay"></span></label>
