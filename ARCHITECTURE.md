@@ -58,7 +58,7 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Cults3D-Adapter | fertig: GraphQL live introspektiert, Modell-Query + Lizenzkatalog **gegen die echte API verifiziert** (Fixtures verbatim), Smoke-Test gelaufen; Lizenztabelle vollständig (14 Einträge) |
 | Printables-Adapter | fertig: Endpunkt öffentlich, Introspection deaktiviert — Felder per Fehler-Probing **live verifiziert** (inkl. Lizenzkatalog, 22 Einträge), Smoke-Test gelaufen |
 | Formular-E2E neue Quellen | **beide live durchgespielt**: Cults3D → Entwurf `c3d-flexi-turtle-9770ca`, Printables → `prn-3161-c96d60`, jeweils ohne Datei, mit Texten, Merkmalen, Referenzbildern und laufendem Preflight. (Cults3D-Lauf fiel in einen Opus-Ausfall und lief über `LISTER_MODEL=claude-sonnet-5` — gleicher Codepfad; Printables danach mit dem Opus-Default.) |
-| Druckdaten aus 3MF | fertig: Parser gegen zwei echte Bambu-Exporte verifiziert, Upload-Karte + Apply mit Herkunfts-Audit **im Browser live durchgespielt** (inkl. MANUAL-Override und Designer-Mismatch-Warnung); Schritt „pHash-Sperrindex für Designer-Bilder" bewusst offen |
+| Druckdaten aus 3MF | fertig: Parser gegen zwei echte Bambu-Exporte verifiziert, Upload-Karte + Apply mit Herkunfts-Audit **im Browser live durchgespielt** (inkl. MANUAL-Override und Designer-Mismatch-Warnung). Aus der 3MF werden **nie** Bilder übernommen (Nutzer-Entscheid; pHash-Index gestrichen — war Vorlagen-Boilerplate) |
 
 425 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
 `npm test && npm run build` läuft sauber.
@@ -232,12 +232,19 @@ lesbar. Das 3MF trägt außerdem die Provenienz der Quellplattform (Designer,
 Lizenz, DesignModelId) — ein Designer-Mismatch zur Inseratsquelle gibt eine
 laute Warnung (live geprüft: Moosstab-3MF auf Benchy-Inserat).
 
-**Bewusst offen:** Schritt 4 der Spezifikation (Designer-Bilder aus
-`Auxiliaries/Model Pictures/` in einen pHash-Sperrindex) — der Parser listet
-die Namen schon (`auxiliaryPictures`), aber ein Wahrnehmungs-Hash braucht
-Bilddekodierung und damit eine neue Abhängigkeit; Entscheidung steht aus.
-Fixtures sind die zwei echten Exporte, getrimmt (G-Code auf Header, Bilder
-als Namens-Stubs); `testdata/` ist gitignored.
+**Gestrichen (Nutzer-Entscheid 19.08.):** Schritt 4 der ursprünglichen
+Spezifikation — ein pHash-Sperrindex für die Designer-Bilder aus
+`Auxiliaries/Model Pictures/`. Der Abschnitt war Vorlagen-Boilerplate aus
+einem anderen Stack (er verweist auf einen „MEDIA-Check", den es hier nicht
+gibt). Die Regel im Lister ist einfacher und steht: **Aus der 3MF werden
+niemals Bilder übernommen** — sie ist reine Messdaten-Quelle. Produktbilder
+kommen ausschließlich aus dem URL-Fetch der Modellseite (durch Lizenz-Gate
+bzw. Rechte- und Bilder-Behauptung freigeschaltet) oder als eigene Fotos.
+Der Parser notiert von den Auxiliaries nur die Dateinamen
+(`auxiliaryPictures`), extrahiert wird nichts; die namensbasierte Bildregel
+bleibt die dokumentierte Grenze. Fixtures sind die zwei echten Exporte,
+getrimmt (G-Code auf Header, Bilder als Namens-Stubs); `testdata/` ist
+gitignored.
 
 ## Nachtrag 2026-08-18 (4) — Mehrplattform-Quellen: Cults3D und Printables
 
