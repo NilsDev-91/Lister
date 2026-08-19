@@ -139,6 +139,21 @@ async function handle(
   const path = url.pathname
   const method = req.method ?? 'GET'
 
+  // `localhost` and `127.0.0.1` are the same machine but not the same origin,
+  // and the session cookie lives on 127.0.0.1. A tab that wandered onto
+  // `localhost` renders every page and fails every button with "No session
+  // cookie" — the second face of the origin lesson documented in
+  // ARCHITECTURE.md. Canonicalising GETs onto the bootstrap host ends the
+  // split at the door; POSTs stop arriving from localhost on their own,
+  // because every form then lives on a canonical page. Sits BEFORE the token
+  // bootstrap so even the opened token URL converges first.
+  const requestHost = req.headers.host ?? ''
+  if ((method === 'GET' || method === 'HEAD') && requestHost !== host && /^(localhost|\[::1\]):\d+$/i.test(requestHost)) {
+    res.writeHead(301, { location: `http://${host}${url.pathname}${url.search}` })
+    res.end()
+    return
+  }
+
   // The token arrives once in the opened URL and then lives in a cookie.
   const bootstrapToken = url.searchParams.get('token')
   if (method === 'GET' && bootstrapToken && tokensMatch(bootstrapToken, sessionToken)) {
