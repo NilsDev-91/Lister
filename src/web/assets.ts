@@ -306,6 +306,12 @@ textarea { min-height:8rem; resize:vertical; line-height:1.5; }
          font-size:.88rem; box-shadow:0 6px 24px rgba(0,0,0,.45); cursor:pointer;
          transition:opacity .3s ease; }
 .toast.gone { opacity:0; }
+.modal-backdrop { position:fixed; inset:0; z-index:80; background:rgba(0,0,0,.55);
+                  display:flex; align-items:center; justify-content:center; padding:1rem; }
+.modal { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+         padding:1.1rem 1.2rem; max-width:34rem; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+.modal p { margin:0 0 1rem; color:var(--ink); font-size:.92rem; line-height:1.5; }
+.modal .actions { justify-content:flex-end; }
 .toast.bad { background:#3a201c; border:1px solid var(--bad); color:#f6d2cb; }
 .toast.ok { background:#22301d; border:1px solid var(--ok); color:#dbeacf; }
 .toast.warn { background:#332a19; border:1px solid var(--warn); color:#f0e0c2; }
@@ -441,7 +447,12 @@ if (market) {
     // The same button publishes or revises depending on the marketplace's
     // state, and both the label and the money question have to say which.
     button.textContent = live ? 'Änderungen übertragen' : 'Live schalten';
-    if (form) form.dataset.confirm = live ? form.dataset.confirmRevise : form.dataset.confirmPublish;
+    if (form) {
+      form.dataset.confirm = live ? form.dataset.confirmRevise : form.dataset.confirmPublish;
+      // The publish runs inside the request and takes seconds; the button has
+      // to say which of the two is running, not just go quiet.
+      form.dataset.busy = live ? 'Wird übertragen…' : 'Wird veröffentlicht…';
+    }
     // Built from nodes rather than innerHTML: the name comes out of the DOM,
     // and the link target is the one fixed anchor this page has.
     note.textContent = '';
@@ -573,9 +584,62 @@ if (guarded) {
 }
 
 // Anything that costs money asks first, with the amount in the question.
+//
+// The question is asked by our own dialog, not by window.confirm(): the
+// in-app browser pane this UI is also viewed in returns false from confirm()
+// after two milliseconds without ever showing anything. Every guarded button
+// — "Live schalten", "Diese Bilder übernehmen" — was therefore a silent
+// no-op there. Treating an unanswerable question as "no" is the safe
+// direction, but a guard that cannot be answered is a broken button, so the
+// dialog is now part of the page.
+function askConfirm(message, onYes) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const box = document.createElement('div');
+  box.className = 'modal';
+  const text = document.createElement('p');
+  text.textContent = message;
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.className = 'btn ghost';
+  no.textContent = 'Abbrechen';
+  const yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'btn';
+  yes.textContent = 'Fortfahren';
+  actions.append(no, yes);
+  box.append(text, actions);
+  backdrop.append(box);
+  document.body.append(backdrop);
+
+  const close = () => {
+    document.removeEventListener('keydown', onKey);
+    backdrop.remove();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+  };
+  document.addEventListener('keydown', onKey);
+  no.addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  yes.addEventListener('click', () => { close(); onYes(); });
+  // Focus lands on "Abbrechen": these questions guard money and other
+  // people's photographs, so a stray Enter must not answer them.
+  no.focus();
+}
+
 for (const form of document.querySelectorAll('[data-confirm]')) {
   form.addEventListener('submit', (e) => {
-    if (!window.confirm(form.dataset.confirm)) e.preventDefault();
+    if (form.dataset.confirmed === '1') return; // already answered — let it go
+    e.preventDefault();
+    askConfirm(form.dataset.confirm, () => {
+      form.dataset.confirmed = '1';
+      // requestSubmit, not submit: it re-runs the submit handlers, so the
+      // busy-state and scroll-keeping below still apply to a confirmed send.
+      form.requestSubmit();
+    });
   });
 }
 

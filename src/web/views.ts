@@ -915,7 +915,8 @@ function publishCard(listing: ListingRecord, perMarket: Record<Marketplace, numb
     <form method="post" action="/listing/${esc(listing.id)}/publish"
           data-confirm="${ebayLive ? confirmRevise : confirmPublish}"
           data-confirm-publish="${confirmPublish}"
-          data-confirm-revise="${confirmRevise}">
+          data-confirm-revise="${confirmRevise}"
+          data-busy="${ebayLive ? 'Wird übertragen…' : 'Wird veröffentlicht…'}">
       <div class="stack">
         <select name="marketplace" id="publish-market">
           <option value="ebay" data-blockers="${perMarket.ebay}" data-live="${ebayLive ? 1 : 0}">eBay${ebayLive ? ' — live' : ''}</option>
