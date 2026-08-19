@@ -11,6 +11,16 @@ export const DATA_DIR = process.env.LISTER_DATA_DIR ?? join(homedir(), '.3d-prin
 export const TOKENS_FILE = join(DATA_DIR, 'tokens.json')
 export const IMAGE_CACHE_DIR = join(DATA_DIR, 'images')
 export const UPLOAD_DIR = join(DATA_DIR, 'uploads')
+/**
+ * The web UI's session token.
+ *
+ * Persisted so restarting the server does not invalidate the tabs that are
+ * already open: a fresh token per run meant every restart answered the next
+ * button press with a bare 403 ("Session token does not match"), which reads
+ * as "the button is broken". It is a secret, so it sits in the same 0700
+ * directory as the OAuth tokens and is written 0600.
+ */
+export const SESSION_TOKEN_FILE = join(DATA_DIR, 'session-token')
 
 /** Creates the data directory tree. Safe to call repeatedly. */
 export function ensureDataDir(): void {

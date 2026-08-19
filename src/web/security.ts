@@ -39,7 +39,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
   'referrer-policy': 'same-origin',
 }
 
-/** Fresh for every server start; never written to disk. */
+/** A fresh secret. Persisted by the server (see SESSION_TOKEN_FILE) so open tabs survive a restart. */
 export function newSessionToken(): string {
   return randomBytes(24).toString('base64url')
 }

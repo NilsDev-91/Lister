@@ -1,13 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { writeFile, mkdtemp, readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, extname } from 'node:path'
 import open from 'open'
 import { log, UserError } from '../util/log.js'
 import { collectingIo, type Io } from '../util/io.js'
 import { listAll, get, upsert } from '../store/db.js'
-import { imageDirFor } from '../util/paths.js'
+import { imageDirFor, ensureDataDir, SESSION_TOKEN_FILE } from '../util/paths.js'
 import { downloadImages } from '../images.js'
 import { gate } from '../sources/license.js'
 import { attachPrintData, applyPrintData } from '../commands/printdata.js'
@@ -88,8 +88,34 @@ export interface ServerHandle {
   close(): Promise<void>
 }
 
+/**
+ * The session token, kept across restarts.
+ *
+ * A fresh token per run looked tidy and cost an afternoon of testing: every
+ * restart left the open tab holding a stale cookie, and the next button press
+ * — a publish, in the case that found this — came back as a bare 403 while
+ * every page still rendered. From the outside that is indistinguishable from
+ * a broken button. The token stays a secret: it lives in the same 0700 data
+ * directory as the OAuth tokens and is written 0600. Delete the file to
+ * rotate it.
+ */
+function loadOrCreateSessionToken(): string {
+  ensureDataDir()
+  try {
+    const stored = readFileSync(SESSION_TOKEN_FILE, 'utf8').trim()
+    // Shape-checked rather than trusted: a truncated or hand-edited file must
+    // mint a new token instead of weakening the gate.
+    if (/^[A-Za-z0-9_-]{32,}$/.test(stored)) return stored
+  } catch {
+    // Missing or unreadable — fall through and write a fresh one.
+  }
+  const token = newSessionToken()
+  writeFileSync(SESSION_TOKEN_FILE, token, { encoding: 'utf8', mode: 0o600 })
+  return token
+}
+
 export async function startServer(options: { port: number; openBrowser: boolean }): Promise<ServerHandle> {
-  const sessionToken = newSessionToken()
+  const sessionToken = loadOrCreateSessionToken()
   const host = `127.0.0.1:${options.port}`
 
   const server = createServer((req, res) => {
@@ -167,7 +193,18 @@ async function handle(
     const guard = guardMutation(req, host, sessionToken)
     if (!guard.ok) {
       log.warn(`web: blockierte Anfrage — ${guard.reason}`)
-      send(res, 403, errorPage('Anfrage abgewiesen.', guard.reason))
+      // A stale session is the one blocked case with an easy answer, so say it.
+      const stale = guard.reason === 'No session cookie.' || guard.reason === 'Session token does not match.'
+      send(
+        res,
+        403,
+        errorPage(
+          'Anfrage abgewiesen.',
+          stale
+            ? `${guard.reason} Die Sitzung dieses Tabs gehört zu einem anderen Serverlauf. Öffne die im Terminal ausgegebene Adresse mit ?token=… erneut, dann funktioniert der Knopf wieder.`
+            : guard.reason,
+        ),
+      )
       return
     }
   }
