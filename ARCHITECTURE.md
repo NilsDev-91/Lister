@@ -58,6 +58,7 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Cults3D-Adapter | fertig: GraphQL live introspektiert, Modell-Query + Lizenzkatalog **gegen die echte API verifiziert** (Fixtures verbatim), Smoke-Test gelaufen; Lizenztabelle vollständig (14 Einträge) |
 | Printables-Adapter | fertig: Endpunkt öffentlich, Introspection deaktiviert — Felder per Fehler-Probing **live verifiziert** (inkl. Lizenzkatalog, 22 Einträge), Smoke-Test gelaufen |
 | Formular-E2E neue Quellen | **beide live durchgespielt**: Cults3D → Entwurf `c3d-flexi-turtle-9770ca`, Printables → `prn-3161-c96d60`, jeweils ohne Datei, mit Texten, Merkmalen, Referenzbildern und laufendem Preflight. (Cults3D-Lauf fiel in einen Opus-Ausfall und lief über `LISTER_MODEL=claude-sonnet-5` — gleicher Codepfad; Printables danach mit dem Opus-Default.) |
+| Druckdaten aus 3MF | fertig: Parser gegen zwei echte Bambu-Exporte verifiziert, Upload-Karte + Apply mit Herkunfts-Audit **im Browser live durchgespielt** (inkl. MANUAL-Override und Designer-Mismatch-Warnung); Schritt „pHash-Sperrindex für Designer-Bilder" bewusst offen |
 
 425 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
 `npm test && npm run build` läuft sauber.
@@ -181,6 +182,62 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-19 — Druckdaten aus geslicten 3MFs (Messwerte statt Schätzung)
+
+**Feature:** `.gcode.3mf`-Upload am Inserat (Karte „Druckdaten", CLI
+`lister printdata <id> <datei> [--apply]`). Gewicht, Druckzeit, Filament und
+Maße kommen dann aus dem eigenen Slice — attach (Evidenz erfassen) und apply
+(Werte übernehmen) sind bewusst getrennt, jede Zahl trägt Herkunft
+(`printApplied`: 3MF/MANUAL + fileSha256 + parserVersion).
+
+**Der teuerste Fund, gegen zwei echte Bambu-Exporte verifiziert: ein
+geslictes 3MF enthält KEINE Geometrie.** `<resources>`/`<build/>` sind leer,
+kein `3D/Objects/` — eine Mesh-Bounding-Box ist aus dieser Eingabeklasse
+prinzipiell nicht berechenbar. Der ursprünglich geplante Mesh-Parser
+(Einheiten, Transforms, Komponenten-Rekursion, SAX) entfiel ersatzlos.
+Stattdessen, alles Messwerte des Slicers:
+
+- **Höhe:** G-Code-Header `; max_z_height:` — traf beide realen Varianten
+  (120/150 mm) auf 0,1 mm.
+- **Breite/Tiefe:** `Metadata/plate_N.json` → `bbox_all` (volle
+  X/Y-Projektion in Bett-mm; Semantik vom Nutzer gegen die Bambu-Anzeige
+  bestätigt). Die Zuordnung Länge/Breite ist Konvention (größere Seite =
+  Länge), sichtbar editierbar; liegt das Teil flach (Z kleinste Ausdehnung),
+  gibt es `ORIENTATION_AMBIGUOUS` statt einer Ratung.
+- **Gewicht/Zeit/Filament:** `slice_info.config` (`prediction` = Bambus
+  Gesamtzeit-Anzeige; „model printing time" aus dem G-Code-Header ist
+  kürzer und wird mitgeführt). Falle: `first_layer_time` trägt ein
+  Dezimal-KOMMA, `weight` einen Punkt.
+- Die G-Code-Körper (9–11 MB je Platte) werden streamend gelesen und nach
+  dem Header verworfen — 3-MB-Archiv in ~70 ms.
+
+**Plattenregel (Nutzer-Entscheid):** eine Druckplatte pro Inserat; mehrere
+nur als Farbvarianten desselben Bauteils (Vergleich über `used_m`/Volumen —
+übersteht Materialwechsel — plus Höhe und Objektnamen). Alle Filamenttypen
+und -farben wandern dann als Mehrfachwerte in die Merkmale Material/Farbe
+(Hex→deutscher Farbname in `print/colours.ts`, `SELECTION_ONLY`-tauglich).
+Baugruppen über mehrere Platten bleiben Handarbeit; die echte
+Zwei-Platten-Datei bewies nebenbei, dass Addieren falsch wäre: ihre Platten
+sind ALTERNATIVEN (120er ODER 150er), kein Set.
+
+**Gewicht und Maße fließen über `product` in die vorhandene
+Merkmals-Engine** (`factsFromProduct` → `planAspects`), damit sie in der
+Schreibweise der jeweiligen Kategorie landen — nicht als hartkodierte
+Aspect-Namen. Manuelle Übernahme-Änderungen werden als MANUAL protokolliert;
+ein Reparse/Re-Upload frischt nur die Evidenz auf und fasst übernommene
+Werte nie an (Test pinnt es). Uploads liegen content-addressiert unter
+`~/.3d-print-lister/uploads/<id>/<sha256>.gcode.3mf`, jede Version bleibt
+lesbar. Das 3MF trägt außerdem die Provenienz der Quellplattform (Designer,
+Lizenz, DesignModelId) — ein Designer-Mismatch zur Inseratsquelle gibt eine
+laute Warnung (live geprüft: Moosstab-3MF auf Benchy-Inserat).
+
+**Bewusst offen:** Schritt 4 der Spezifikation (Designer-Bilder aus
+`Auxiliaries/Model Pictures/` in einen pHash-Sperrindex) — der Parser listet
+die Namen schon (`auxiliaryPictures`), aber ein Wahrnehmungs-Hash braucht
+Bilddekodierung und damit eine neue Abhängigkeit; Entscheidung steht aus.
+Fixtures sind die zwei echten Exporte, getrimmt (G-Code auf Header, Bilder
+als Namens-Stubs); `testdata/` ist gitignored.
 
 ## Nachtrag 2026-08-18 (4) — Mehrplattform-Quellen: Cults3D und Printables
 

@@ -7,6 +7,7 @@ import { preflightCommand } from './commands/preflight.js'
 import { keywordsCommand } from './commands/keywords.js'
 import { proposalCommand } from './commands/proposal.js'
 import { titlesCommand } from './commands/titles.js'
+import { printDataCommand } from './commands/printdata.js'
 import { aspectsCommand } from './commands/aspects.js'
 import { startServer } from './web/server.js'
 import { listAll, get, remove, storeFile } from './store/db.js'
@@ -263,6 +264,20 @@ program
   .option('--refresh', 'Ignore the cached category metadata and fetch it again', false)
   .action(async (id: string, opts) => {
     await aspectsCommand({ id, categoryId: opts.categoryId, refresh: opts.refresh })
+  })
+
+// ---------------------------------------------------------------------------
+// printdata
+// ---------------------------------------------------------------------------
+
+program
+  .command('printdata')
+  .description('Read measured print data (weight, time, dimensions, filament) from your own sliced .gcode.3mf')
+  .argument('<id>', 'Local listing id')
+  .argument('<file>', 'Sliced plate export from Bambu Studio / OrcaSlicer (.gcode.3mf)')
+  .option('--apply', 'Write the parsed values into the listing (product facts + eBay aspects) as parsed', false)
+  .action(async (id: string, file: string, opts) => {
+    await printDataCommand({ listingId: id, file, apply: opts.apply })
   })
 
 // ---------------------------------------------------------------------------

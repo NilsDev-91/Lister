@@ -10,6 +10,7 @@ export const DATA_DIR = process.env.LISTER_DATA_DIR ?? join(homedir(), '.3d-prin
 
 export const TOKENS_FILE = join(DATA_DIR, 'tokens.json')
 export const IMAGE_CACHE_DIR = join(DATA_DIR, 'images')
+export const UPLOAD_DIR = join(DATA_DIR, 'uploads')
 
 /** Creates the data directory tree. Safe to call repeatedly. */
 export function ensureDataDir(): void {
@@ -21,6 +22,17 @@ export function ensureDataDir(): void {
 /** Per-listing image staging directory. */
 export function imageDirFor(listingId: string): string {
   const dir = join(IMAGE_CACHE_DIR, listingId)
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  return dir
+}
+
+/**
+ * Per-listing directory for uploaded print files (sliced 3MFs). Files are
+ * stored content-addressed (`<sha256>.gcode.3mf`), so a re-upload of the same
+ * bytes lands on the same path and every recorded version stays readable.
+ */
+export function uploadDirFor(listingId: string): string {
+  const dir = join(UPLOAD_DIR, listingId)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   return dir
 }

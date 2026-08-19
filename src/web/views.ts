@@ -5,6 +5,8 @@ import type { ListingRecord, Marketplace } from '../types.js'
 import type { Job } from './jobs.js'
 import type { Finding } from '../commands/preflight.js'
 import { gate } from '../sources/license.js'
+import { proposedValues, formatDuration } from '../commands/printdata.js'
+import { germanColourName } from '../print/colours.js'
 import { coverage } from '../seo/coverage.js'
 import { changedMarketplaces, diffCopy } from '../proposal.js'
 import { aspectRows, type AspectRow } from './aspect-fields.js'
@@ -1165,6 +1167,8 @@ export function listingDetail({
           </form>
           ${sourceImageReference(listing)}
         </div>
+
+        ${printDataCard(listing)}
       </div>
 
       <div>
@@ -1184,6 +1188,128 @@ export function listingDetail({
       </div>
     </div>`,
   })
+}
+
+/**
+ * Measured print data from the seller's own sliced 3MF.
+ *
+ * Attach and apply are two steps on purpose: the parse result is evidence and
+ * gets shown editable before any of it becomes listing content. Every field
+ * carries its provenance; a value the seller edits before applying is
+ * recorded as MANUAL, and a re-upload only refreshes this card — applied
+ * values live in the product fields and survive it untouched.
+ */
+function printDataCard(listing: ListingRecord): string {
+  const uploads = listing.printUploads
+  const latest = uploads[uploads.length - 1]
+
+  const uploadForm = `
+    <form method="post" action="/listing/${esc(listing.id)}/printdata" enctype="multipart/form-data"
+          data-busy="Wird gelesen…">
+      <label for="printFile">Geslicte Druckplatte (.gcode.3mf)</label>
+      <input class="field" id="printFile" name="printFile" type="file" accept=".3mf">
+      <p class="note">Aus Bambu Studio / OrcaSlicer exportiert. Gewicht, Druckzeit, Filament und Maße
+         sind dann Messwerte deines eigenen Drucks, keine Schätzung. Eine Platte pro Inserat —
+         mehrere Platten nur als Farbvarianten desselben Bauteils.</p>
+      <div class="actions"><button class="btn ghost" type="submit">Hochladen und lesen</button></div>
+    </form>`
+
+  if (!latest) {
+    return `<div class="card" style="margin-top:1.1rem">
+      <h3>Druckdaten (3MF)</h3>
+      ${uploadForm}
+    </div>`
+  }
+
+  const spec = latest.spec
+  const proposed = proposedValues(spec)
+
+  const plateRows = spec.plates
+    .map((p) => {
+      const swatches = p.filaments
+        .map(
+          (f) =>
+            `<span style="display:inline-block;width:.75rem;height:.75rem;border-radius:2px;
+                    background:${esc(f.colorHex)};border:1px solid var(--line);vertical-align:middle"></span>
+             ${esc(f.type)} ${esc(germanColourName(f.colorHex) ?? f.colorHex)} (${esc(String(f.usedG))} g)`,
+        )
+        .join(', ')
+      return `<p class="note" style="margin:.15rem 0">Platte ${p.index}: <strong>${esc(String(p.weightG))} g</strong>
+        · ${esc(formatDuration(p.printTimeSec))}${p.totalLayers ? ` · ${p.totalLayers} Layer` : ''}
+        · ${swatches}</p>`
+    })
+    .join('')
+
+  const review =
+    spec.needsReview && spec.reviewReason === 'ORIENTATION_AMBIGUOUS'
+      ? banner({
+          kind: 'warn',
+          text: 'Das Teil liegt flach auf der Platte — die Zuordnung Höhe/Breite/Tiefe ist deine Entscheidung, die Felder unten sind frei belegbar.',
+        })
+      : spec.needsReview
+        ? banner({ kind: 'warn', text: 'Maße unvollständig gelesen — bitte prüfen und ergänzen.' })
+        : ''
+
+  const badge = (field: string): string => {
+    const applied = listing.printApplied[field]
+    if (!applied || applied.fileSha256 !== latest.fileSha256) return ''
+    return applied.source === '3MF'
+      ? ' <span class="note">✓ aus 3MF übernommen</span>'
+      : ' <span class="note">✓ übernommen (manuell angepasst)</span>'
+  }
+
+  const older = uploads.slice(0, -1).reverse()
+  const history = older.length
+    ? `<details style="margin-top:.6rem"><summary class="note">Frühere Versionen (${older.length})</summary>
+        ${older
+          .map(
+            (u) =>
+              `<p class="note">${esc(u.fileName)} — ${esc(u.uploadedAt.slice(0, 16).replace('T', ' '))} ·
+               ${esc(u.spec.plates[0] ? `${u.spec.plates[0].weightG} g` : '')} · ${esc(u.fileSha256.slice(0, 12))}… · ${esc(u.spec.parserVersion)}</p>`,
+          )
+          .join('')}
+       </details>`
+    : ''
+
+  const val = (v: number | null): string => (v === null ? '' : String(v))
+
+  return `<div class="card" style="margin-top:1.1rem">
+    <h3>Druckdaten (3MF)</h3>
+    ${review}
+    ${plateRows}
+    ${spec.colourVariants ? `<p class="note">${spec.plates.length} Platten — dasselbe Bauteil in verschiedenen Filamenten; alle Farben und Materialien wandern in die Merkmale.</p>` : ''}
+    <p class="note">Quelle: ${esc(latest.fileName)} · SHA-256 ${esc(latest.fileSha256.slice(0, 12))}… ·
+       ${esc(spec.parserVersion)} · ${esc(spec.provenance.slicerVersion ?? 'Slicer unbekannt')} ·
+       hochgeladen ${esc(latest.uploadedAt.slice(0, 16).replace('T', ' '))}</p>
+
+    <form method="post" action="/listing/${esc(listing.id)}/printdata/apply">
+      <input type="hidden" name="sha" value="${esc(latest.fileSha256)}">
+      <div class="row">
+        <div><label for="pdLength">Länge (mm)${badge('dimensionsMm')}</label>
+             <input class="field" id="pdLength" name="pdLength" value="${esc(val(proposed.lengthMm))}"></div>
+        <div><label for="pdWidth">Breite (mm)</label>
+             <input class="field" id="pdWidth" name="pdWidth" value="${esc(val(proposed.widthMm))}"></div>
+        <div><label for="pdHeight">Höhe (mm)</label>
+             <input class="field" id="pdHeight" name="pdHeight" value="${esc(val(proposed.heightMm))}"></div>
+        <div><label for="pdWeight">Gewicht (g)${badge('weightGrams')}</label>
+             <input class="field" id="pdWeight" name="pdWeight" value="${esc(val(proposed.weightGrams))}"></div>
+      </div>
+      <div class="gap"></div>
+      <div class="row">
+        <div><label for="pdMaterial">Material${badge('material')}</label>
+             <input class="field" id="pdMaterial" name="pdMaterial" value="${esc(proposed.material ?? '')}"></div>
+        <div><label for="pdColours">Farbe(n), Komma-getrennt${badge('colour')}</label>
+             <input class="field" id="pdColours" name="pdColours" value="${esc(proposed.colours.join(', '))}"></div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">Werte übernehmen</button>
+        <span class="note">Schreibt in Artikel-Fakten und eBay-Merkmale. Ein vor dem Übernehmen geänderter
+          Wert wird als „manuell" protokolliert; spätere Uploads fassen übernommene Werte nie an.</span>
+      </div>
+    </form>
+    ${history}
+    ${uploadForm}
+  </div>`
 }
 
 export function errorPage(message: string, hint?: string): string {

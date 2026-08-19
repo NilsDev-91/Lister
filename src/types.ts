@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { MarketplaceSchema } from './marketplace.js'
 import { SeoEvidenceSchema } from './seo/types.js'
+import { PhysicalSpecSchema } from './print/threemf.js'
 
 /**
  * The domain model. Everything crossing a module boundary is validated here, so
@@ -465,6 +466,47 @@ export const ListingRecordSchema = z.object({
    * could otherwise check one category and list into another.
    */
   ebayCategoryId: z.string().nullable().catch(null).default(null),
+  /**
+   * Sliced-3MF uploads, newest last — measured print data for the item the
+   * seller actually prints, parsed from their own Bambu/Orca export.
+   *
+   * DERIVED, hence `.catch([])`: every entry is reproducible by re-parsing the
+   * stored archive (content-addressed under DATA_DIR/uploads/<id>/), so a
+   * schema change must degrade this list rather than take the store with it.
+   * A new upload appends; earlier versions stay readable.
+   */
+  printUploads: z
+    .array(
+      z.object({
+        fileSha256: z.string(),
+        fileName: z.string(),
+        filePath: z.string(),
+        uploadedAt: z.string(),
+        spec: PhysicalSpecSchema,
+      }),
+    )
+    .catch([])
+    .default([]),
+  /**
+   * Which listing fields were filled from print data, and from which file —
+   * the per-field audit trail the feature promises: every number traces back
+   * to fileSha256 + parserVersion + source. `MANUAL` records that the seller
+   * overrode the parsed value at apply time; a re-parse never touches the
+   * applied values themselves (they live in `product`/`copy`), so manual
+   * edits survive it by construction.
+   */
+  printApplied: z
+    .record(
+      z.string(),
+      z.object({
+        source: z.enum(['3MF', 'MANUAL']),
+        fileSha256: z.string(),
+        parserVersion: z.string(),
+        appliedAt: z.string(),
+      }),
+    )
+    .catch({})
+    .default({}),
   /**
    * Seller-entered SKU for the single-variant case. Null means the local id is
    * used, which was the only behaviour before this field existed.

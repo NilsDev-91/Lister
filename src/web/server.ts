@@ -10,6 +10,7 @@ import { listAll, get, upsert } from '../store/db.js'
 import { imageDirFor } from '../util/paths.js'
 import { downloadImages } from '../images.js'
 import { gate } from '../sources/license.js'
+import { attachPrintData, applyPrintData } from '../commands/printdata.js'
 import * as ebayAuth from '../marketplaces/ebay/auth.js'
 import { getAspectSpecs } from '../marketplaces/ebay/client.js'
 import { EbayCopySchema, EbaySkuSchema, EtsyCopySchema, type ListingRecord, type Marketplace } from '../types.js'
@@ -549,6 +550,71 @@ async function handleListingAction(
     // surface to have written. Re-read so only imageUrls changes here.
     upsert({ ...(get(id) ?? listing), imageUrls: urls })
     redirect(res, flashUrl(backTo, 'ok', `${urls.length} Bild(er) zu eBay hochgeladen.`))
+    return
+  }
+
+  // --- print data (sliced 3MF) ---------------------------------------------
+  if (action === '/printdata') {
+    const upload = files.find((f) => f.field === 'printFile')
+    if (!upload) {
+      redirect(res, flashUrl(backTo, 'bad', 'Keine Datei ausgewählt.'))
+      return
+    }
+    if (!/\.3mf$/i.test(upload.filename)) {
+      redirect(res, flashUrl(backTo, 'bad', 'Bitte eine geslicte .gcode.3mf hochladen — andere Dateitypen liest der Import nicht.'))
+      return
+    }
+    // A job, like create and the image adoption: a 100-MB archive is legal
+    // input, and the parse belongs behind the progress page, not in the POST.
+    const job = startJob(
+      async (io) => {
+        await attachPrintData({ listingId: id, data: upload.data, fileName: upload.filename, io })
+        return id
+      },
+      {
+        label: 'Druckdaten werden gelesen',
+        hint: 'Gewicht, Zeit, Filament und Maße kommen aus deiner geslicten Datei.',
+      },
+    )
+    redirect(res, `/progress/${encodeURIComponent(job.id)}`)
+    return
+  }
+
+  if (action === '/printdata/apply') {
+    // German decimal commas are the normal case here — "120,04" is a value,
+    // not two. Empty fields mean "do not touch that field".
+    const num = (name: string): number | null => {
+      const raw = (fields[name] ?? '').trim().replace(',', '.')
+      if (!raw) return null
+      const value = Number(raw)
+      if (!Number.isFinite(value) || value <= 0) {
+        throw new UserError(`"${fields[name]}" ist kein brauchbarer Wert für ${name.replace(/^pd/, '')}.`)
+      }
+      return value
+    }
+    try {
+      await applyPrintData({
+        listingId: id,
+        fileSha256: fields['sha'] ?? '',
+        lengthMm: num('pdLength'),
+        widthMm: num('pdWidth'),
+        heightMm: num('pdHeight'),
+        weightGrams: num('pdWeight'),
+        material: (fields['pdMaterial'] ?? '').trim() || null,
+        colours: (fields['pdColours'] ?? '').split(',').map((c) => c.trim()).filter(Boolean),
+        io: collectingIo(false),
+      })
+    } catch (error) {
+      if (error instanceof UserError) {
+        redirect(res, flashUrl(backTo, 'bad', error.message))
+        return
+      }
+      throw error
+    }
+    redirect(
+      res,
+      flashUrl(backTo, 'ok', 'Druckdaten übernommen — Gewicht und Maße laufen über die Merkmals-Engine in der Schreibweise der Kategorie.'),
+    )
     return
   }
 

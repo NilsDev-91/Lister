@@ -21,8 +21,13 @@ export interface ParsedForm {
   files: UploadedFile[]
 }
 
-/** Refuses bodies large enough to be a problem rather than a photo. */
-const MAX_BODY_BYTES = 60 * 1024 * 1024
+/**
+ * Refuses bodies large enough to be a problem rather than an upload. Sized for
+ * the biggest legitimate upload: a sliced multi-plate 3MF, whose G-code bodies
+ * run to tens of megabytes (the 100 MB budget the print-data feature grants),
+ * plus headroom for the rest of the form.
+ */
+const MAX_BODY_BYTES = 120 * 1024 * 1024
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = []
