@@ -28,10 +28,31 @@ export interface CategoryResolution {
  * Preflight and publish used to resolve it independently, which meant preflight
  * could validate against one category while publish listed into another.
  *
- * The research consensus outranks eBay's own suggestion on purpose: it is
+ * A clear research consensus outranks eBay's own suggestion on purpose: it is
  * measured from where ranked competitors actually sit, while `suggestCategory`
- * guesses from a phrase the copywriter invented.
+ * guesses from a phrase the copywriter invented. "Clear" is the load-bearing
+ * word — see `pickResearchCategory`.
  */
+/**
+ * How much of the sample has to agree before the research decides the category.
+ *
+ * The category is not a cosmetic choice on eBay: it sets the fees and the
+ * required item specifics. The first real run produced a leader holding 17 %
+ * of a five-way split — that is a plurality, not a consensus, and taking it
+ * silently would have listed into a category nobody measured. Below the
+ * threshold the ranking is still shown; it just stops deciding on its own.
+ */
+const CONSENSUS_SHARE = 0.3
+
+/** Pure half of the rule above, so the threshold can be tested without eBay. */
+export function pickResearchCategory(
+  candidates: { id: string; name: string | null; share: number }[] | undefined,
+): { id: string; name: string | null } | null {
+  const top = candidates?.[0]
+  if (!top || top.share < CONSENSUS_SHARE) return null
+  return { id: top.id, name: top.name }
+}
+
 export async function resolveEbayCategory(
   listing: ListingRecord,
   override?: string | undefined,
@@ -39,8 +60,8 @@ export async function resolveEbayCategory(
   if (override) return { categoryId: override, source: 'given' }
   if (listing.ebayCategoryId) return { categoryId: listing.ebayCategoryId, source: 'stored' }
 
-  const consensus = listing.seo?.ebay?.categoryConsensus
-  if (consensus) return { categoryId: consensus.id, source: 'research' }
+  const consensus = pickResearchCategory(listing.seo?.ebay?.categoryCandidates)
+  if (consensus) return { categoryId: consensus.id, source: 'research', ...(consensus.name ? { name: consensus.name } : {}) }
 
   const suggestion = await ebay.suggestCategory(listing.copy.ebay.categoryHint || listing.copy.ebay.title)
   if (!suggestion) {
@@ -48,7 +69,7 @@ export async function resolveEbayCategory(
       config.ebay.env === 'sandbox'
         ? 'Category lookup is unavailable in the eBay sandbox.'
         : `eBay suggested no category for "${listing.copy.ebay.categoryHint}".`,
-      'Pass --category-id <id> once; it is stored on the listing and reused everywhere after that.',
+      'Set the eBay category id in the editor, or pass --category-id <id> once — either way it is stored on the listing and reused everywhere after that.',
     )
   }
   return { categoryId: suggestion.categoryId, source: 'suggested', name: suggestion.categoryName }

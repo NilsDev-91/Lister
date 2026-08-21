@@ -117,6 +117,11 @@ textarea { min-height:8rem; resize:vertical; line-height:1.5; }
 .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(9rem,1fr)); gap:.75rem; }
 .gap { height:.85rem; }
 
+.catrow { display:flex; align-items:center; gap:.5rem; padding:.25rem 0; border-bottom:1px solid var(--line); }
+.catrow span:first-of-type { flex:1; min-width:0; overflow-wrap:anywhere; }
+.catrow .btn { padding:.2rem .5rem; font-size:.75rem; }
+.catrow.active { border-left:2px solid var(--ok); padding-left:.4rem; }
+
 .counter { float:right; font-variant-numeric:tabular-nums; font-size:.75rem; color:var(--dim); }
 .counter.tight { color:var(--warn); }
 .counter.over { color:var(--bad); font-weight:700; }

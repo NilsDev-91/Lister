@@ -7,6 +7,7 @@ import { preflightCommand } from './commands/preflight.js'
 import { keywordsCommand } from './commands/keywords.js'
 import { proposalCommand } from './commands/proposal.js'
 import { titlesCommand } from './commands/titles.js'
+import { categoryCommand } from './commands/category.js'
 import { printDataCommand } from './commands/printdata.js'
 import { aspectsCommand } from './commands/aspects.js'
 import { startServer } from './web/server.js'
@@ -298,6 +299,24 @@ program
       marketplace: opts.marketplace as Marketplace | undefined,
       credit: opts.credit,
     })
+  })
+
+// ---------------------------------------------------------------------------
+// publish
+// ---------------------------------------------------------------------------
+
+program
+  .command('category')
+  .description('Take one of the categories the keyword research measured')
+  .argument('<id>', 'Local listing id')
+  .addOption(
+    new Option('-M, --marketplace <name>', 'Which marketplace the pick applies to')
+      .choices(['ebay', 'etsy'])
+      .makeOptionMandatory(),
+  )
+  .requiredOption('--use <n>', 'Apply researched category number n', (v) => parseInt(v, 10))
+  .action(async (id: string, opts) => {
+    await categoryCommand({ id, marketplace: opts.marketplace as Marketplace, use: opts.use })
   })
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ import { auditContent, auditEbayAspects, Report } from '../commands/preflight.js
 import { createCommand } from '../commands/create.js'
 import { publishCommand } from '../commands/publish.js'
 import { keywordsCommand } from '../commands/keywords.js'
+import { categoryCommand } from '../commands/category.js'
 import { proposalCommand } from '../commands/proposal.js'
 import { titlesCommand } from '../commands/titles.js'
 import { uploadPictures } from '../marketplaces/ebay/pictures.js'
@@ -531,6 +532,9 @@ async function handleListingAction(
       description: fields['etsyDesc'] ?? '',
       tags: splitList(fields['etsyTags']),
       materials: splitList(fields['etsyMaterials']),
+      // Absent means unchanged, as with the aspects and the price: a form from
+      // before this field existed must not blank the category.
+      taxonomyHint: (fields['etsyTaxonomy'] ?? '').trim() || listing.copy.etsy.taxonomyHint,
     })
 
     // Seller-entered SKU and colour variants ride on the same form. The parse
@@ -546,6 +550,18 @@ async function handleListingAction(
     // marketplace would silently charge a price the seller never typed. An
     // absent field means "unchanged": a form from before this input existed
     // must not reset the price to anything.
+    // The eBay category rides along too. Digits only, because that is what an
+    // eBay category id is — and a typo here is not cosmetic: preflight would
+    // validate the item specifics of one category while publish lists into
+    // another. Absent means unchanged; empty means "forget it and resolve
+    // again", which is how a wrong one gets undone.
+    const categoryRaw = (fields['ebayCategory'] ?? '').trim()
+    const categoryGiven = fields['ebayCategory'] !== undefined
+    const categoryError =
+      !categoryRaw || /^\d{1,15}$/.test(categoryRaw)
+        ? null
+        : `eBay-Kategorie: „${categoryRaw}" ist keine Kategorie-ID — eBay nummeriert Kategorien, z. B. 59890.`
+
     const priceRaw = (fields['price'] ?? '').trim()
     const priceValue = ProductInputSchema.shape.priceEur.safeParse(Number(priceRaw.replace(',', '.')))
     const priceError =
@@ -560,6 +576,7 @@ async function handleListingAction(
       !etsy.success ||
       (sku && !sku.success) ||
       priceError ||
+      categoryError ||
       parsedVariants.errors.length ||
       parsedAspects.errors.length
     ) {
@@ -568,6 +585,7 @@ async function handleListingAction(
         ...(etsy.success ? [] : etsy.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)),
         ...(sku && !sku.success ? sku.error.issues.map((i) => `SKU: ${i.message}`) : []),
         ...(priceError ? [priceError] : []),
+        ...(categoryError ? [categoryError] : []),
         ...parsedVariants.errors.map((e) => `Varianten: ${e}`),
         ...parsedAspects.errors.map((e) => `Merkmale: ${e}`),
       ].join(' · ')
@@ -591,10 +609,21 @@ async function handleListingAction(
       ...current,
       copy: { ebay: ebay.data, etsy: etsy.data },
       product: priceRaw && priceValue.success ? { ...current.product, priceEur: priceValue.data } : current.product,
+      ebayCategoryId: categoryGiven ? categoryRaw || null : current.ebayCategoryId,
       sku: sku ? sku.data : null,
       variants,
     })
-    redirect(res, flashUrl(backTo, 'ok', 'Texte gespeichert.'))
+    const categoryMoved = categoryGiven && (categoryRaw || null) !== current.ebayCategoryId
+    redirect(
+      res,
+      flashUrl(
+        backTo,
+        categoryMoved ? 'warn' : 'ok',
+        categoryMoved
+          ? `Gespeichert. Neue eBay-Kategorie — Merkmale neu planen: lister aspects ${id}`
+          : 'Texte gespeichert.',
+      ),
+    )
     return
   }
 
@@ -859,6 +888,32 @@ async function handleListingAction(
     return
   }
 
+  // --- researched category -------------------------------------------------
+  if (action === '/category') {
+    const marketplace = fields['marketplace'] === 'ebay' ? 'ebay' : 'etsy'
+    const use = Number(fields['use'] ?? '')
+    if (!Number.isInteger(use) || use < 1) {
+      redirect(res, flashUrl(backTo, 'bad', 'Ungültige Kategorie-Auswahl.'))
+      return
+    }
+    const io = collectingIo(true)
+    try {
+      await categoryCommand({ id, marketplace, use, io })
+    } catch (error) {
+      if (error instanceof UserError) {
+        redirect(res, flashUrl(backTo, 'bad', `${error.message}${error.hint ? ` ${error.hint}` : ''}`))
+        return
+      }
+      throw error
+    }
+    // The command's own lines carry what happened, including the re-plan
+    // warning eBay needs — repeating it here in different words would let the
+    // two drift apart.
+    const said = io.lines.filter((l) => l.level === 'ok' || l.level === 'warn').map((l) => l.message)
+    redirect(res, flashUrl(backTo, 'ok', said.join(' · ') || 'Kategorie übernommen.'))
+    return
+  }
+
   // --- title options -------------------------------------------------------
   if (action === '/titles') {
     const io = collectingIo(true)
@@ -921,7 +976,9 @@ async function handleListingAction(
       draftOnly,
       yes: true,
       locationKey: 'default-de',
-      categoryId: fields['categoryId'] || undefined,
+      // No override from the UI any more: the category lives on the listing,
+      // in the marketplace's own card, and a second field for the same thing
+      // was a second answer to the question "which category is this in?".
       io,
     })
 

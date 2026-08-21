@@ -25,7 +25,7 @@ function evidence(candidates: KeywordCandidate[]): KeywordEvidence {
     sampleSize: 10,
     relevance: { anchors: [], sampled: 10, kept: 10, sufficient: true },
     candidates,
-    categoryConsensus: null,
+    categoryCandidates: [],
     priceBandEur: null,
     aspectFacets: [],
     notes: [],

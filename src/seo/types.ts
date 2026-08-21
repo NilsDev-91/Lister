@@ -54,6 +54,15 @@ export const CompetitorListingSchema = z.object({
   kind: z.enum(['physical', 'digital', 'both', 'unknown']).default('unknown'),
   /** Marketplace category id, as a string for the same reason as `id`. */
   categoryId: z.string().nullable().default(null),
+  /**
+   * The category's own name, when the marketplace hands it over.
+   *
+   * eBay's Browse response carries it next to the id and it used to be thrown
+   * away — which left the research recommending "category 261636" to a human.
+   * Etsy sends only the id; those names are resolved from the taxonomy after
+   * mining, which is why this stays nullable.
+   */
+  categoryName: z.string().nullable().default(null),
   url: z.string().nullable().default(null),
 })
 export type CompetitorListing = z.infer<typeof CompetitorListingSchema>
@@ -150,16 +159,30 @@ export const KeywordEvidenceSchema = z.object({
   sampleSize: z.number().int().nonnegative(),
   candidates: z.array(KeywordCandidateSchema),
   /**
-   * The category most top-ranked listings sit in.
+   * The categories the comparable listings sit in, most-used first.
    *
-   * A measured answer to the question `categoryHint` currently guesses at.
-   * `share` is how much of the sample agreed, so a weak consensus is visible
-   * rather than presented as fact.
+   * A measured answer to the question `categoryHint` guesses at — and a list
+   * rather than a single winner, because "most used" and "agreed on" are not
+   * the same claim. The Benchy sample's leader held 17 %: alone that reads
+   * like a finding, as the top of five it reads like the split it is. `count`
+   * and `share` are both carried, so four of five and forty of two hundred
+   * stay tellable apart.
+   *
+   * Replaces the earlier single `categoryConsensus`. Required, so evidence
+   * written before this existed degrades through `ListingRecord.seo`'s
+   * `.catch(null)` rather than being read as if it had been ranked.
    */
-  categoryConsensus: z
-    .object({ id: z.string(), share: z.number().min(0).max(1) })
-    .nullable()
-    .default(null),
+  categoryCandidates: z
+    .array(
+      z.object({
+        id: z.string(),
+        /** Resolved name or path. Null when the marketplace never said. */
+        name: z.string().nullable().default(null),
+        count: z.number().int().positive(),
+        share: z.number().min(0).max(1),
+      }),
+    )
+    .max(5),
   priceBandEur: PriceBandSchema.nullable().default(null),
   aspectFacets: z.array(AspectFacetSchema).default([]),
   /**

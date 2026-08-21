@@ -60,11 +60,24 @@ const MIN_COMPOUND_ANCHOR = 4
 /**
  * The words that describe the item being sold.
  *
- * Taken from the seller's own material — the source page's title and tags, the
- * copy on both marketplaces, the material — because that is the vocabulary the
- * item is actually described in. Not marketplace-specific on purpose: an item
- * is the same item on eBay and Etsy, and the wider vocabulary makes the net
- * gentler, which is the direction this filter should err in.
+ * Taken from the source page, both marketplace titles and the material: the
+ * vocabulary the item is actually described in. Not marketplace-specific on
+ * purpose — an item is the same item on eBay and Etsy, and the wider
+ * vocabulary makes the net gentler, which is the direction this filter should
+ * err in.
+ *
+ * **The Etsy tags are deliberately left out, and that is the important line.**
+ * Tags are where a rewrite puts the phrases the research just mined. Feeding
+ * them back in as anchors closes a loop: research → tags → wider anchors →
+ * broader sample → broader research. It was measured, not feared. A Benchy
+ * rewrite adopted "desk decor" and "desk ornament"; the next run seeded on
+ * those, admitted 171 of 285 listings as comparable, and recommended "decor
+ * gift", "teacher gift" and "glasses holder" while the price band moved from
+ * a median of EUR 4.09 to EUR 25.37. The same amplification the follow-up
+ * gate stopped inside one run, one loop further out.
+ *
+ * A filter must not be fed by the thing it filters. Titles stay: the seller
+ * and the model write those to describe the item, not to chase a ranking.
  */
 export function anchorTerms(listing: ListingRecord): string[] {
   const texts = [
@@ -72,7 +85,6 @@ export function anchorTerms(listing: ListingRecord): string[] {
     ...listing.source.tags,
     listing.copy.ebay.title,
     listing.copy.etsy.title,
-    ...listing.copy.etsy.tags,
     listing.product.material,
   ]
 
@@ -166,7 +178,7 @@ export function withholdThinEvidence(evidence: KeywordEvidence): KeywordEvidence
   return {
     ...evidence,
     candidates: [],
-    categoryConsensus: null,
+    categoryCandidates: [],
     priceBandEur: null,
     aspectFacets: [],
     notes: [...evidence.notes, note],

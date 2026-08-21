@@ -710,12 +710,44 @@ function keywordPanel(listing: ListingRecord): string {
       // spatial question, and a marker on a line answers it faster than numbers.
       const price = evidence.priceBandEur ? priceScale(listing.product.priceEur, evidence.priceBandEur) : ''
 
+      // Categories are offered, never taken: on eBay the category sets the fees
+      // and the required item specifics, on Etsy where the item is findable at
+      // all. Anteil and Anzahl stand next to each name so a 17-percent leader
+      // cannot pass for a consensus.
+      const categories = evidence.categoryCandidates.length
+        ? `<h5 style="margin:.9rem 0 .3rem;font-size:.8rem;color:var(--dim)">Kategorien der Vergleichsinserate</h5>
+           ${evidence.categoryCandidates
+             .map((c, i) => {
+               // The list doubles as the display of what is set: without this,
+               // taking a category changed a value the page never showed, and
+               // the only feedback was a toast that fades after two seconds.
+               const active =
+                 marketplace === 'ebay'
+                   ? listing.ebayCategoryId === c.id
+                   : Boolean(c.name) && listing.copy.etsy.taxonomyHint === c.name!.split(' > ').pop()
+               return `<form method="post" action="/listing/${esc(listing.id)}/category" class="catrow${
+                 active ? ' active' : ''
+               }">
+                  <input type="hidden" name="marketplace" value="${marketplace}">
+                  <input type="hidden" name="use" value="${i + 1}">
+                  <span>${esc(c.name ?? `ID ${c.id}`)}</span>
+                  <span class="note">${Math.round(c.share * 100)} % · ${c.count}</span>
+                  ${
+                    active
+                      ? '<span class="note" style="color:var(--ok)">aktuell</span>'
+                      : '<button class="btn ghost" type="submit">Übernehmen</button>'
+                  }
+                </form>`
+             })
+             .join('')}`
+        : ''
+
       return `${heading}
         <p class="note">${evidence.sampleSize} vergleichbare Inserate aus ${evidence.queries.length} Suchen
           (${evidence.relevance.sampled} Treffer insgesamt) · ${result.used.length} Empfehlung(en) im Text</p>
         <table class="kw"><thead><tr><th>Phrase</th><th>Nutzen</th><th>Konkurrenz</th><th>Views/Tag</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4">Keine Kandidaten</td></tr>'}</tbody></table>
-        ${price}${missed}${notes}`
+        ${price}${categories}${missed}${notes}`
     })
     .join('')
 
@@ -945,7 +977,6 @@ function publishCard(listing: ListingRecord, perMarket: Record<Marketplace, numb
           <option value="ebay" data-blockers="${perMarket.ebay}" data-live="${ebayLive ? 1 : 0}">eBay${ebayLive ? ' — live' : ''}</option>
           <option value="etsy" data-blockers="${perMarket.etsy}" data-live="${etsyLive ? 1 : 0}">Etsy${etsyLive ? ' — live' : ''}</option>
         </select>
-        <input class="field" name="categoryId" placeholder="eBay-Kategorie-ID (Sandbox: Pflicht)">
         <button class="btn" type="submit" id="publish-btn" ${perMarket.ebay ? 'disabled' : ''}>${
           ebayLive ? 'Änderungen übertragen' : 'Live schalten'
         }</button>
@@ -1143,6 +1174,15 @@ export function listingDetail({
               Filter, nicht nur weiter nach hinten. Ziel sind 10. Welche diese Kategorie kennt, zeigt
               <code>lister aspects ${esc(listing.id)}</code>.</p>
             <div class="gap"></div>
+            <label for="ebayCategory">eBay-Kategorie-ID</label>
+            <input class="field" id="ebayCategory" name="ebayCategory" inputmode="numeric"
+                   style="max-width:12rem" value="${esc(listing.ebayCategoryId ?? '')}"
+                   placeholder="noch nicht gesetzt">
+            <p class="note">Nur Ziffern. Setzt sich selbst über <code>lister aspects ${esc(listing.id)}</code>,
+              über einen gemessenen Vorschlag rechts oder von Hand. <strong>Die Kategorie bestimmt Gebühren und
+              Pflichtmerkmale</strong> — nach einer Änderung die Merkmale neu planen, sonst prüft der Preflight
+              gegen eine Kategorie, in die gar nicht eingestellt wird.</p>
+            <div class="gap"></div>
             <label for="ebaySku">Eigene SKU <span class="note">(leer = lokale ID ${esc(listing.id)})</span></label>
             <input class="field" id="ebaySku" name="ebaySku" value="${esc(listing.sku ?? '')}"
                    placeholder="z. B. WW-DART-001" maxlength="50">
@@ -1190,6 +1230,12 @@ export function listingDetail({
             <label for="etsyMaterials">Materialien (nur Buchstaben, Ziffern, Leerzeichen)</label>
             <input class="field" id="etsyMaterials" name="etsyMaterials"
                    value="${esc(listing.copy.etsy.materials.join(', '))}">
+            <div class="gap"></div>
+            <label for="etsyTaxonomy">Etsy-Kategorie</label>
+            <input class="field" id="etsyTaxonomy" name="etsyTaxonomy"
+                   value="${esc(listing.copy.etsy.taxonomyHint)}">
+            <p class="note">Der Publish löst diesen Namen in Etsys Kategoriebaum auf; je genauer, desto
+              besser rankt das Inserat. Die Recherche schlägt rechts gemessene Kategorien vor.</p>
           </div>
 
           <div class="actions"><button class="btn" type="submit">Änderungen speichern</button></div>

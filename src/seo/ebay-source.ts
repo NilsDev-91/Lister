@@ -46,6 +46,7 @@ export async function searchEbay(args: EbaySearchArgs): Promise<SearchResult> {
         favourites: null,
         daysListed: null,
         categoryId: item.categoryId,
+        categoryName: item.categoryName,
         url: item.url,
       }),
     ),

@@ -252,6 +252,22 @@ function checkContent(listing: ListingRecord, marketplaces: Marketplace[], repor
       report.ok(`eBay has ${listing.imageUrls.length} image URL(s)`)
     }
 
+    // Said here rather than left to the publish call, and offline so both the
+    // CLI and the UI say it: without a stored category the sandbox cannot
+    // resolve one at all, and production would list into whatever
+    // `suggestCategory` guesses from a phrase the copywriter invented. The
+    // category decides the fees and the required item specifics — the aspect
+    // checks below are skipped entirely while it is missing.
+    if (!listing.ebayCategoryId) {
+      report.warn(
+        'No eBay category stored',
+        'Item specifics cannot be checked without one, and the sandbox cannot look one up.',
+        'Set the eBay category id in the editor, or run `lister aspects <id> --category-id <id>` once.',
+      )
+    } else {
+      report.ok(`eBay category ${listing.ebayCategoryId} stored`)
+    }
+
     const title = listing.copy.ebay.title
     if (title.length > 80) {
       report.block('eBay title too long', `${title.length} characters; the limit is 80.`)

@@ -104,6 +104,50 @@ afterAll(async () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
+describe('editing the Etsy category', () => {
+  // It rides on the same form as the copy, and it is the field a researched
+  // category lands in. Before it was rendered, taking a suggestion wrote a
+  // value the page never showed — which looked exactly like nothing happening.
+  it('saves an edited category', async () => {
+    const res = await save({ etsyTaxonomy: 'Figurines & Knick Knacks' })
+    expect(res.status).toBe(303)
+    expect(get(ID)?.copy.etsy.taxonomyHint).toBe('Figurines & Knick Knacks')
+  })
+
+  it('keeps the stored category when the field is absent', async () => {
+    const res = await save({})
+    expect(res.status).toBe(303)
+    expect(get(ID)?.copy.etsy.taxonomyHint).toBe('Figurines & Knick Knacks')
+  })
+})
+
+describe('editing the eBay category', () => {
+  it('stores a category id and warns that the item specifics are now stale', async () => {
+    const res = await save({ ebayCategory: '59890' })
+    expect(get(ID)?.ebayCategoryId).toBe('59890')
+    // A moved category means different required specifics — saying "gespeichert"
+    // alone would let the seller believe the plan still fits.
+    expect(res.headers.get('location')).toContain('kind=warn')
+  })
+
+  it('refuses anything that is not a category id', async () => {
+    const res = await save({ ebayCategory: 'Dekofiguren' })
+    expect(res.headers.get('location')).toContain('kind=bad')
+    expect(get(ID)?.ebayCategoryId).toBe('59890')
+  })
+
+  it('clears the category when the field is emptied, so a wrong one can be undone', async () => {
+    await save({ ebayCategory: '' })
+    expect(get(ID)?.ebayCategoryId).toBeNull()
+  })
+
+  it('leaves the stored category alone when the field is absent', async () => {
+    await save({ ebayCategory: '59890' })
+    await save({})
+    expect(get(ID)?.ebayCategoryId).toBe('59890')
+  })
+})
+
 describe('editing the price', () => {
   it('takes a German decimal comma', async () => {
     const res = await save({ price: '24,50' })

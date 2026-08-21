@@ -72,6 +72,9 @@ export function toCompetitorListing(listing: PublicListing, nowMs: number): Comp
     daysListed: daysSince(listing.original_creation_timestamp ?? listing.creation_timestamp, nowMs),
     kind: toKind(listing.listing_type),
     categoryId: listing.taxonomy_id != null ? String(listing.taxonomy_id) : null,
+    // Etsy sends the id only; the name is resolved from the taxonomy after
+    // mining, where one lookup covers every candidate at once.
+    categoryName: null,
     url: listing.url ?? null,
   })
 }

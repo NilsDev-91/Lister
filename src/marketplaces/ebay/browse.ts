@@ -78,6 +78,8 @@ export interface BrowseItem {
   /** Null unless eBay quoted the currency we asked for; never silently converted. */
   priceEur: number | null
   categoryId: string | null
+  /** eBay states it next to the id; Etsy has no equivalent. */
+  categoryName: string | null
   url: string | null
 }
 
@@ -152,6 +154,10 @@ export async function searchItems(args: BrowseSearchArgs): Promise<BrowseSearchR
       title: summary.title,
       priceEur: parsePrice(summary.price),
       categoryId: summary.categories?.[0]?.categoryId ?? null,
+      // Free of charge, and the research is unreadable without it: eBay sends
+      // the name right next to the id, and dropping it left the category
+      // suggestion as a bare number.
+      categoryName: summary.categories?.[0]?.categoryName ?? null,
       url: summary.itemWebUrl ?? null,
     })
   }

@@ -283,7 +283,9 @@ describe('mine', () => {
     expect(asEbay.candidates.find((c) => c.phrase === 'articulated flexible dragon')?.usableAsTag).toBe(true)
   })
 
-  it('reports the category most ranked listings agree on, with its share', () => {
+  it('ranks the categories the sample sits in rather than crowning one', () => {
+    // A plurality is not a consensus: whoever reads this has to be able to see
+    // that 2 of 3 and 40 of 200 are different claims, which a lone winner hid.
     const evidence = mined([
       result('x', [
         listing({ id: '1', title: 'Dragon Figure', categoryId: '1234' }),
@@ -291,7 +293,38 @@ describe('mine', () => {
         listing({ id: '3', title: 'Dragon Figure', categoryId: '9999' }),
       ]),
     ])
-    expect(evidence.categoryConsensus).toEqual({ id: '1234', share: 2 / 3 })
+    expect(evidence.categoryCandidates).toEqual([
+      { id: '1234', name: null, count: 2, share: 2 / 3 },
+      { id: '9999', name: null, count: 1, share: 1 / 3 },
+    ])
+  })
+
+  it('names a category from the listings that carry a name, and keeps the commonest', () => {
+    // eBay states the name next to the id; a single odd spelling must not
+    // rename a category the rest of the sample agrees on.
+    const evidence = mined([
+      result('x', [
+        listing({ id: '1', title: 'Dragon Figure', categoryId: '1234', categoryName: 'Figuren' }),
+        listing({ id: '2', title: 'Dragon Figure', categoryId: '1234', categoryName: 'Figuren' }),
+        listing({ id: '3', title: 'Dragon Figure', categoryId: '1234', categoryName: 'Figuren & Deko' }),
+      ]),
+    ])
+    expect(evidence.categoryCandidates[0]).toEqual({ id: '1234', name: 'Figuren', count: 3, share: 1 })
+  })
+
+  it('keeps at most five categories, the busiest first', () => {
+    const evidence = mined([
+      result(
+        'x',
+        Array.from({ length: 12 }, (_, i) =>
+          listing({ id: `l${i}`, title: 'Dragon Figure', categoryId: `c${i % 6}` }),
+        ),
+      ),
+    ])
+    expect(evidence.categoryCandidates).toHaveLength(5)
+    expect(evidence.categoryCandidates.every((c) => c.count === 2)).toBe(true)
+    // Stable order on a tie, so two runs over the same sample read the same.
+    expect(evidence.categoryCandidates.map((c) => c.id)).toEqual(['c0', 'c1', 'c2', 'c3', 'c4'])
   })
 
   it('excludes digital downloads and says how many it dropped', () => {

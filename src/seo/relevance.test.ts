@@ -88,6 +88,7 @@ function competitor(title: string, over: Partial<CompetitorListing> = {}): Compe
     daysListed: null,
     kind: 'physical',
     categoryId: null,
+    categoryName: null,
     url: null,
     ...over,
   }
@@ -106,6 +107,16 @@ describe('anchorTerms', () => {
   it('leaves out words that carry no search intent', () => {
     expect(ANCHORS).not.toContain('von')
     expect(ANCHORS).not.toContain('für')
+  })
+
+  it('does not anchor on the Etsy tags — the field the research writes into', () => {
+    // The loop this closes was measured on the Benchy: a rewrite adopted
+    // "desk decor", the next run anchored on it, and 171 of 285 generic decor
+    // listings counted as competition. A filter fed by its own output widens
+    // until it accepts anything.
+    const drifted = listing()
+    drifted.copy.etsy.tags = ['desk decor', 'teacher gift', 'glasses holder']
+    expect(anchorTerms(drifted)).toEqual(ANCHORS)
   })
 })
 
@@ -181,7 +192,7 @@ describe('the real run, replayed', () => {
     expect(after.relevance.sufficient).toBe(false)
     expect(after.candidates).toEqual([])
     expect(after.priceBandEur).toBeNull()
-    expect(after.categoryConsensus).toBeNull()
+    expect(after.categoryCandidates).toEqual([])
     // The attempt survives in full — that is what makes "this niche is empty"
     // a usable answer rather than a silence.
     expect(after.relevance.sampled).toBeGreaterThan(after.relevance.kept)
@@ -221,7 +232,7 @@ describe('withholdThinEvidence', () => {
           usableAsTag: true,
         },
       ],
-      categoryConsensus: { id: '505', share: 0.7 },
+      categoryCandidates: [{ id: '505', name: 'Clothing', count: 28, share: 0.7 }],
       priceBandEur: { count: 40, min: 5, p25: 10, median: 15, p75: 20, max: 40 },
       aspectFacets: [],
       notes: [],

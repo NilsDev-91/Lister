@@ -164,11 +164,15 @@ function reportMarketplace(
     io.info(`  ${candidate.phrase} — ${Math.round(candidate.rankerShare * 100)}% of rankers, ${competition}, ${demand}${flag}`)
   }
 
-  if (evidence.categoryConsensus) {
-    io.detail(
-      `Most ranked listings sit in category ${evidence.categoryConsensus.id} ` +
-        `(${Math.round(evidence.categoryConsensus.share * 100)}% of the sample).`,
-    )
+  if (evidence.categoryCandidates.length) {
+    io.step(`${marketplace} — categories the comparable listings sit in`)
+    evidence.categoryCandidates.forEach((c, i) => {
+      io.info(
+        `  ${i + 1}. ${c.name ?? '(name unavailable)'} — ${Math.round(c.share * 100)}% of the sample, ` +
+          `${c.count} listing(s) [id ${c.id}]`,
+      )
+    })
+    io.detail(`Take one:  lister category ${listing.id} -M ${marketplace} --use 1`)
   }
   if (evidence.priceBandEur) {
     const verdict = assessPrice(listing.product.priceEur, evidence.priceBandEur)

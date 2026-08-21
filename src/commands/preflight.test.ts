@@ -75,6 +75,23 @@ function permitted(overrides: Partial<ListingRecord> = {}): ListingRecord {
   return record
 }
 
+describe('the eBay category', () => {
+  // The UI's publish form used to carry a category field; it was removed once
+  // the category became a stored field in the eBay card. Without a signal here
+  // a listing with no category would sail through preflight and fail at the
+  // publish call — after the seller had confirmed the fees.
+  it('warns when no category is stored, because nothing can be checked without one', () => {
+    const report = auditContent(permitted({ ebayCategoryId: null }), ['ebay'])
+    expect(report.findings.find((f) => /No eBay category/i.test(f.title))?.severity).toBe('warning')
+  })
+
+  it('confirms the stored category instead', () => {
+    const report = auditContent(permitted({ ebayCategoryId: '59890' }), ['ebay'])
+    expect(report.findings.find((f) => /No eBay category/i.test(f.title))).toBeUndefined()
+    expect(report.passed.some((p) => /59890/.test(p))).toBe(true)
+  })
+})
+
 describe('preflight rights checks', () => {
   it("blocks reuse of the designer's images when rights were asserted separately", () => {
     const report = auditContent(

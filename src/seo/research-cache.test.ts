@@ -94,6 +94,7 @@ describe('disk roundtrip', () => {
         daysListed: 200,
         kind: 'physical',
         categoryId: '68887482',
+        categoryName: 'Dart Equipment',
         url: null,
       },
     ],

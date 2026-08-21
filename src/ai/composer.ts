@@ -103,7 +103,8 @@ What matters:
 - Be concrete and honest. Use the seller's stated material, dimensions, weight and processing time. Never invent a specification you were not given — no made-up dimensions, print times, or claims about strength, food safety, or weather resistance.
 - BOTH marketplaces are German-language. Write each natively for its marketplace — same language, different voice — never a word-for-word translation of the other.
 - eBay titles are keyword-dense because eBay search is literal. Etsy titles read more naturally and lead with what the thing is.
-- Etsy tags are search phrases German buyers actually type, not single generic words. Prefer "3d druck drache" over "drache".
+- Etsy tags are search phrases buyers actually type, not single generic words. Prefer "3d druck drache" over "drache".
+- Tag language follows the evidence, not the prose. Without keyword research, write German tags. WITH research, take the measured phrases verbatim — including English ones — because that is what the marketplace index was measured against. Titles and descriptions stay German either way: the buyer reads those, the tags only match searches.
 - German compounds run long and Etsy tags are capped at 20 characters. Prefer the two-word form a buyer would type ("moosstab pflanzen") over one compound that busts the limit ("zimmerpflanzenmoosstab"). Count the characters.
 - Write real German on BOTH marketplaces: "für", "Küche", "Größe", "Füße" — NEVER transliterate to "fuer", "Kueche", "Groesse", not even in an eBay title. Umlauts and ß are ordinary letters and are accepted in every field (titles, tags, materials, item specifics); spelling them out reads like a broken import to a German buyer, and both marketplaces match the two forms alike, so it buys nothing.
 - No emoji anywhere. No ALL CAPS. No invented brand names — this is an unbranded handmade item.
@@ -151,16 +152,17 @@ function formatEvidence(evidence: KeywordEvidence): string {
     `KEYWORD RESEARCH — ${evidence.marketplace.toUpperCase()}`,
     `${evidence.sampleSize} competing listings sampled across ${evidence.queries.length} searches.`,
     'Ranked by opportunity, which favours phrases with demand that are not yet crowded — not the busiest phrases.',
+    'These phrases are MEASURED against the live marketplace index. Use the strong ones VERBATIM in the tags,',
+    'in the spelling and language shown — a translated phrase is a different phrase and matches a different search.',
     '',
     rows || '  (no candidates met the evidence threshold)',
   ]
 
-  if (evidence.categoryConsensus) {
-    lines.push(
-      '',
-      `Category most ranked listings sit in: ${evidence.categoryConsensus.id} ` +
-        `(${Math.round(evidence.categoryConsensus.share * 100)}% of the sample).`,
-    )
+  if (evidence.categoryCandidates.length) {
+    const rows = evidence.categoryCandidates
+      .map((c) => `${c.name ?? `category ${c.id}`} (${Math.round(c.share * 100)}%, ${c.count} listings)`)
+      .join(', ')
+    lines.push('', `Categories the comparable listings sit in: ${rows}.`)
   }
   if (evidence.priceBandEur) {
     const { count, min, p25, median, p75, max } = evidence.priceBandEur
@@ -271,6 +273,33 @@ Dispatch time: ${product.processingDays} business days (made to order)
 Seller notes: ${product.notes || '(none)'}${attribution}
 ${research ? `\n${research}\n` : ''}
 ${task}`
+}
+
+/**
+ * How many of the strongest measured phrases the tags have to carry.
+ *
+ * Narrow on purpose. Tags are the one field that is pure search matching —
+ * there is no sentence to break and no reader to confuse — so a measured
+ * phrase belongs there in the spelling it was measured in. Titles and
+ * descriptions stay the model's judgement and stay German.
+ *
+ * Three, not thirteen: the ranking's tail is far less certain than its head,
+ * and a tag list dictated end to end would push out the seller's own knowledge
+ * of the item, which the sample cannot have.
+ */
+const MEASURED_TAGS_REQUIRED = 3
+
+/** The measured phrases the copy dropped. Empty when there is nothing to check. */
+function missingMeasuredTags(copy: ListingCopy, evidence: SeoEvidence | null | undefined): string[] {
+  const etsy = evidence?.etsy
+  if (!etsy || !etsy.relevance.sufficient) return []
+
+  const have = new Set(copy.etsy.tags.map((t) => t.trim().toLowerCase()))
+  return etsy.candidates
+    .filter((c) => c.usableAsTag)
+    .slice(0, MEASURED_TAGS_REQUIRED)
+    .filter((c) => !have.has(c.phrase))
+    .map((c) => c.phrase)
 }
 
 /** Formats zod issues into instructions the model can act on. */
@@ -486,8 +515,36 @@ export async function composeListingCopy(args: ComposeArgs): Promise<ListingCopy
     // The API cannot enforce length or character rules, so validate here.
     const validated = ListingCopySchema.safeParse(candidate)
     if (validated.success) {
-      if (attempt > 1) log.detail(`Copy validated after ${attempt} attempts.`)
-      return validated.data
+      // Schema-clean is not the same as evidence-faithful. Asking the model to
+      // use the research and trusting it to have done so is exactly the claim
+      // `coverage.ts` exists to distrust — so check it here, where a repair
+      // round is still possible, instead of only reporting it afterwards.
+      const missing = missingMeasuredTags(validated.data, args.evidence)
+      if (!missing.length) {
+        if (attempt > 1) log.detail(`Copy validated after ${attempt} attempts.`)
+        return validated.data
+      }
+      if (attempt === maxAttempts) {
+        // Unevidenced copy still beats no copy: the seller can edit tags in a
+        // second, and the coverage report names what is missing.
+        log.warn(`Copy still leaves out measured phrases: ${missing.join(', ')}`)
+        return validated.data
+      }
+      log.detail(`Copy leaves out ${missing.length} measured phrase(s); asking for a repair.`)
+      messages.push(
+        { role: 'assistant', content: JSON.stringify(generated) },
+        {
+          role: 'user',
+          content: `These phrases were MEASURED against the live Etsy index and are missing from the tags:
+
+${missing.map((p) => `- ${p}`).join('\n')}
+
+Put each of them into the etsy tags VERBATIM — exact spelling, exact wording, no translation, no
+reordering of the words. A rewritten phrase matches a different search and throws the measurement
+away. Drop the weakest existing tags to make room, keep at most 13, and change nothing else.`,
+        },
+      )
+      continue
     }
 
     lastError = validated.error

@@ -32,6 +32,7 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Etsy öffentliche Suche | fertig, **gegen die echte API verifiziert** (kein OAuth) |
 | eBay Browse (Recherche) | implementiert, **braucht Production-Keyset**, nie live gelaufen |
 | Keyword-Recherche | fertig, **live gegen echte Etsy-Daten gelaufen**; eBay-Hälfte ungeprüft. Seit 21.08. mit Relevanz-Gate und Belegschwelle (`seo/relevance.ts`): passt die Stichprobe nicht zum Artikel, gibt es **keine** Empfehlung, kein Preisband, keine Kategorie — siehe Nachtrag 21.08. |
+| Kategorie-Vorschläge | fertig (21.08.): Recherche liefert die Top 5 Kategorien der vergleichbaren Inserate mit Namen, Anzahl und Anteil; Übernahme per Knopf in der UI oder `lister category <id> -M etsy --use 1`. eBay-Namen kommen aus der Browse-Antwort, Etsy-Namen aus der Taxonomie (ein öffentlicher Call je Lauf). Der Konsens entscheidet die eBay-Kategorie nur noch ab 30 % Anteil — **live geprüft** am Benchy |
 | eBay-Aspect-Engine | fertig, **live gegen die Sandbox-Taxonomy geprüft** (6 → 8 Merkmale) |
 | eBay-Titel-Sanitizer | fertig: Emoji und `?` im Schema, Rest als Preflight-Warnung |
 | Etsy-Eignungs-Gate | fertig, Default-Deny; seit 18.08. mit protokolliertem Per-Listing-Override (`etsyDesignRiskAccepted`, Zeitpunkt+Quelle) — Bildregel bleibt ohne Override: Etsy bekommt nur eigene Fotos |
@@ -65,7 +66,7 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | UI-Feinschliff | fertig: Toast-Overlay statt Kopfbanner, Scroll-Position übersteht Aktions-Klicks, Editor-Guard warnt vor ungespeicherten Feldern — **live verifiziert** |
 | Preis im Editor | fertig (21.08.): Feld „Artikel · Preis (EUR)" im Editorformular, deutsches Dezimalkomma erlaubt, **dritte Nachkommastelle wird abgelehnt statt gerundet**; ein fehlendes Feld lässt den Preis unangetastet. Bis dahin war der Preis nur beim Anlegen setzbar. Live-Inserate übernehmen ihn erst per „Änderungen übertragen" (`updateOffer` schreibt `product` mit) |
 
-526 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
+546 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
 `npm test && npm run build` läuft sauber.
 
 > `db.concurrency.test.ts` „is unsafe without the lock" ist ein
@@ -187,6 +188,122 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-21 (2) — Kategorien vorschlagen, und die zweite Rückkopplung
+
+**Kategorien.** Aus `categoryConsensus` (eine ID, ein Anteil) wurden
+`categoryCandidates`: die fünf meistgenutzten Kategorien der **vergleichbaren**
+Stichprobe, mit Namen, Anzahl und Anteil. Warum eine Liste und kein Sieger —
+am Benchy gemessen:
+
+```
+1. Clothing > … > T-shirts                        17 %  (8)   ← der alte "Konsens"
+2. Electronics > Maker Supplies > 3D Printers      17 %  (8)
+3. Art & Collectibles > … > Figurines & Knick Kn.  13 %  (6)   ← die richtige
+4. Toys & Games > … > Desk Toys                     9 %  (4)
+5. Accessories > Keychains                          7 %  (3)
+```
+
+Der Alleinstehende hätte **T-Shirts** gesagt, mit derselben Zuversicht wie bei
+80 %. Namen sind dabei kein Komfort: „482" ist für einen Menschen wie für ein
+Sprachmodell keine Information. eBay liefert den Namen in der Browse-Antwort
+gleich mit (wurde bis dahin weggeworfen), Etsy nennt nur IDs — die werden nach
+dem Mining über `listTaxonomyNodes()` aufgelöst, ein öffentlicher Call je Lauf,
+und ein Fehlschlag lässt die IDs stehen statt den Lauf zu killen.
+
+Übernommen wird auf Klick (`commands/category.ts`, UI-Knopf oder
+`lister category <id> -M etsy --use 1`), nie automatisch.
+
+**Und dann kam der Nutzertest: „Übernehmen wird nicht eingetragen."** Der Klick
+schrieb jedes Mal korrekt — aber **die Kategorie war in der Oberfläche
+nirgends zu sehen**, weder für Etsy noch für eBay. Die einzige Rückmeldung war
+ein Toast, der nach zwei Sekunden verschwindet. Ein Wert, den man nicht sehen
+kann, ist nicht übernommen, egal was im Datensatz steht. Seitdem hat **jeder
+Marktplatz sein Kategoriefeld in seiner eigenen Karte** (Etsy: `taxonomyHint`,
+eBay: `ebayCategoryId`, beide über das Editorformular speicherbar), und die
+Vorschlagsliste markiert die laufende Kategorie mit „aktuell" statt eines
+Knopfes — die Liste ist damit zugleich die Anzeige des Zustands.
+
+Das Kategoriefeld in der Veröffentlichen-Karte ist dafür **entfallen**: zwei
+Felder für dieselbe Frage sind zwei Antworten. Weil damit der letzte sichtbare
+Hinweis auf eine fehlende eBay-Kategorie weg war, sagt es jetzt der Preflight
+(offline, also in CLI und UI gleich): „No eBay category stored — item specifics
+cannot be checked without one." Das ist kein Komfort, sondern deckt eine Lücke:
+**Ohne gespeicherte Kategorie werden die Merkmalsprüfungen komplett
+übersprungen** — der Preflight sah grüner aus, als er war. Die Eingabe nimmt
+nur Ziffern; „Dekofiguren" wird mit Begründung abgelehnt, statt eine
+Kategorie-ID zu erfinden, und ein leeres Feld löscht die Kategorie, damit eine
+falsche zurücknehmbar bleibt. **Etsy speichert den
+Blattnamen** in `taxonomyHint` — das Feld, das der Publish-Pfad ohnehin
+auflöst. Deshalb prüft die Übernahme sofort den Rückweg: Zwei Kategorien können
+denselben Blattnamen tragen („Ornaments" gibt es zweimal), und `matchTaxonomy`
+bevorzugt das tiefste Blatt. Löst der Name auf einen anderen Knoten auf, wird
+die Übernahme laut abgelehnt statt still danebenzulegen; ein Test hält beide
+Fälle fest.
+
+**Der eBay-Konsens entscheidet nur noch ab 30 %** (`pickResearchCategory`).
+Vorher nahm `resolveEbayCategory` den häufigsten Wert kommentarlos — bei 17 %
+hätte das in die T-Shirt-Kategorie gelistet, und die Kategorie bestimmt bei
+eBay Gebühren und Pflichtmerkmale.
+
+## Gemessene Phrasen werden nicht übersetzt — und die Prüfung dazu
+
+Der Composer schreibt beide Marktplätze deutsch (Entscheid 18.08.). Die
+Recherche misst aber, was auf Etsy wirklich im Index steht, und das ist
+englisch. Am Benchy waren fünf der dreizehn Tags als Suchanfrage gelaufen und
+trafen ins Leere:
+
+| Suchanfrage | Inserate auf Etsy |
+|---|---|
+| `benchy boat` | 52 |
+| `3d benchy` | 132 |
+| `benchy boot` | **1** |
+| `3d druck boot` | **4** |
+| `testmodell 3d druck` | **0** |
+
+Die Regel lautet jetzt: **Titel und Beschreibung bleiben deutsch** — die liest
+der Käufer —, **die Tags nehmen die gemessene Schreibweise wörtlich.** Tags
+sind reiner Suchabgleich, kein Fließtext; eine übersetzte Phrase ist eine
+andere Phrase und trifft eine andere Suche.
+
+**Die Regel im Prompt allein hat nicht gereicht.** Der erste Lauf mit der neuen
+Anweisung lieferte `bench boat` — die stärkste Phrase (37 % der Ranker, 52
+Wettbewerber) in verstümmelter Form, und `benchy boat` fehlte ganz. Deshalb
+prüft `composeListingCopy` das jetzt selbst: Die drei stärksten tagfähigen
+Phrasen müssen wörtlich in den Etsy-Tags stehen, sonst geht der Entwurf in
+dieselbe Reparaturschleife wie ein Schema-Verstoß („Copy leaves out 1 measured
+phrase(s); asking for a repair" → „validated after 2 attempts"). Nach drei
+Versuchen wird der Text trotzdem geliefert, mit lauter Warnung — unbelegter
+Text ist besser als kein Text, und `coverage.ts` benennt die Lücke ohnehin.
+Nur drei Phrasen, nicht dreizehn: Der Schwanz der Rangliste ist viel
+unsicherer als ihr Kopf, und eine komplett diktierte Tagliste verdrängt das,
+was der Verkäufer über den Artikel weiß und die Stichprobe nicht wissen kann.
+
+## Die zweite Rückkopplung: ein Filter darf nicht von dem gefüttert werden, was er filtert
+
+Direkt nach dem ersten erfolgreichen Rewrite gemessen, nicht befürchtet:
+
+```
+vor dem Rewrite:   46 von 165 vergleichbar · Median 4,09 € · Top: benchy boat
+nach dem Rewrite: 171 von 285 vergleichbar · Median 25,37 € · Top: decor gift,
+                  office desk, teacher gift, glasses holder
+```
+
+Der Weg dahin: Der Rewrite übernahm `desk decor` und `desk ornament` in die
+Tags. `anchorTerms` las die Tags mit — also wurden `desk` und `decor` zu
+**Ankern**. Der nächste Lauf säte auf ihnen („desk decor gift", „office desk
+decor"), und weil die Anker jetzt breiter waren, zählte fast alles davon als
+vergleichbar. Recherche → Tags → breitere Anker → breitere Stichprobe →
+breitere Recherche. Dieselbe Verstärkung wie bei der Folgeanfrage-Runde, nur
+eine Schleife weiter außen und über Läufe hinweg statt innerhalb eines Laufs.
+
+**Die Tags fliegen deshalb aus den Ankern.** Sie sind genau das Feld, in das
+die Recherche ihre eigene Ausgabe schreibt. Geblieben sind Quellseite (Titel
+und Tags), beide Marktplatz-**Titel** und das Material — Text, den Verkäufer
+und Modell schreiben, um den Artikel zu beschreiben, nicht um zu ranken.
+Wirkung derselben Datenlage nach dem Schnitt: 72 vergleichbare Inserate,
+Median 15,98 €, Spitzenkategorie „Figurines & Knick Knacks" statt T-Shirts,
+und die Coverage stieg von 1 auf 6 der Top-Empfehlungen.
 
 ## Nachtrag 2026-08-21 — Die Recherche erfand einen Markt: „dart" heißt auch Abnäher
 

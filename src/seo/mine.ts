@@ -347,7 +347,6 @@ export function mine(args: MineArgs): KeywordEvidence {
   }
 
   const prices = sample.map((l) => l.priceEur).filter((p): p is number => p !== null)
-  const categories = sample.map((l) => l.categoryId).filter((c): c is string => c !== null)
 
   return {
     marketplace,
@@ -362,7 +361,7 @@ export function mine(args: MineArgs): KeywordEvidence {
       sufficient: sampleSize >= MIN_COMPARABLE,
     },
     candidates: candidates.slice(0, limit),
-    categoryConsensus: modeWithShare(categories),
+    categoryCandidates: rankCategories(sample),
     // Four is the fewest that can produce quartiles meaning anything at all.
     // Below it the band would be two numbers wearing a statistic's clothes.
     priceBandEur:
@@ -381,15 +380,52 @@ export function mine(args: MineArgs): KeywordEvidence {
   }
 }
 
-function modeWithShare(values: string[]): { id: string; share: number } | null {
-  if (!values.length) return null
+/**
+ * The categories of the comparable sample, most-used first.
+ *
+ * A ranking rather than a winner. The mode alone answered "which category?"
+ * with the same confidence whether it held 80 % of the sample or 17 %, and
+ * 17 % is what the first real run produced — five categories in a near-even
+ * split, presented as a consensus.
+ *
+ * Names come from the listings that carry them: eBay states the name next to
+ * the id, Etsy states nothing and gets its names resolved afterwards. Where a
+ * category appears under several spellings, the most frequent one wins, so a
+ * single odd response cannot rename a category.
+ */
+export function rankCategories(
+  listings: { categoryId: string | null; categoryName: string | null }[],
+  max = 5,
+): { id: string; name: string | null; count: number; share: number }[] {
   const counts = new Map<string, number>()
-  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1)
-  let best: [string, number] | undefined
-  for (const entry of counts) {
-    if (!best || entry[1] > best[1] || (entry[1] === best[1] && entry[0] < best[0])) best = entry
+  const names = new Map<string, Map<string, number>>()
+
+  let total = 0
+  for (const listing of listings) {
+    if (!listing.categoryId) continue
+    total++
+    counts.set(listing.categoryId, (counts.get(listing.categoryId) ?? 0) + 1)
+    if (!listing.categoryName) continue
+    const seen = names.get(listing.categoryId) ?? new Map<string, number>()
+    seen.set(listing.categoryName, (seen.get(listing.categoryName) ?? 0) + 1)
+    names.set(listing.categoryId, seen)
   }
-  return { id: best![0], share: best![1] / values.length }
+  if (!total) return []
+
+  const commonest = (id: string): string | null => {
+    let best: [string, number] | undefined
+    for (const entry of names.get(id) ?? []) {
+      if (!best || entry[1] > best[1] || (entry[1] === best[1] && entry[0] < best[0])) best = entry
+    }
+    return best ? best[0] : null
+  }
+
+  return [...counts]
+    // Ties broken by id so the order is stable across runs rather than
+    // inherited from the arrival order of the search results.
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, max)
+    .map(([id, count]) => ({ id, name: commonest(id), count, share: count / total }))
 }
 
 /** Sums facet counts across searches; the same aspect appears in several. */

@@ -18,6 +18,20 @@ vi.mock('./etsy-source.js', () => ({
   searchEtsy: (...args: unknown[]) => searchEtsy(...args),
 }))
 
+/**
+ * The Etsy client is mocked too, and not only for tidiness: an Etsy run now
+ * resolves its category ids into names through `listTaxonomyNodes`, which is a
+ * real HTTP call. Without this the cache tests reached the internet — and a
+ * test that needs the network is a bug in the test.
+ */
+vi.mock('../marketplaces/etsy/client.js', () => ({
+  listTaxonomyNodes: async () => [
+    { id: 1, name: 'Home & Living', path: ['Home & Living'], leaf: false, level: 0 },
+    { id: 68887482, name: 'Dart Equipment', path: ['Sport', 'Dart Equipment'], leaf: true, level: 1 },
+  ],
+  lastRateLimit: () => ({ remainingToday: null, perDay: null }),
+}))
+
 const dir = mkdtempSync(join(tmpdir(), 'lister-research-'))
 
 beforeAll(() => {
@@ -105,6 +119,7 @@ function searchAnswer(): SearchResult {
       daysListed: 90 + i,
       kind: 'physical' as const,
       categoryId: '1',
+      categoryName: null,
       url: null,
     })),
     aspectFacets: [],

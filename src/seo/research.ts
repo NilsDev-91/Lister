@@ -2,7 +2,7 @@ import type { ListingRecord, Marketplace } from '../types.js'
 import { config } from '../config.js'
 import { UserError } from '../util/log.js'
 import { terminalIo, type Io } from '../util/io.js'
-import { lastRateLimit } from '../marketplaces/etsy/client.js'
+import { lastRateLimit, listTaxonomyNodes } from '../marketplaces/etsy/client.js'
 import { searchEtsy } from './etsy-source.js'
 import { searchEbay } from './ebay-source.js'
 import { mine } from './mine.js'
@@ -158,6 +158,14 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
     }
   }
 
+  // Etsy answers with taxonomy ids and nothing else, so "482" is what the
+  // ranking would otherwise recommend to a human. The endpoint is public and
+  // needs only the api key; one call against a 10,000/day quota is not worth a
+  // cache. eBay needs none of this — its search results carry the names.
+  if (marketplace === 'etsy' && evidence.categoryCandidates.length) {
+    evidence = { ...evidence, categoryCandidates: await namedForEtsy(evidence.categoryCandidates, io) }
+  }
+
   reportQuota(marketplace, io)
 
   // The last step before this leaves the module, and the only place it
@@ -181,6 +189,30 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
   for (const note of evidence.notes) io.detail(note)
 
   return evidence
+}
+
+/**
+ * Turns Etsy taxonomy ids into paths a person can read.
+ *
+ * Contained on purpose: a failed name lookup leaves the ids in place and adds
+ * a note. Losing a whole research run — searches already spent — because a
+ * cosmetic lookup failed would be the wrong trade by a wide margin.
+ */
+async function namedForEtsy(
+  candidates: KeywordEvidence['categoryCandidates'],
+  io: Io,
+): Promise<KeywordEvidence['categoryCandidates']> {
+  try {
+    const nodes = await listTaxonomyNodes()
+    const byId = new Map(nodes.map((n) => [String(n.id), n]))
+    return candidates.map((c) => {
+      const node = byId.get(c.id)
+      return node ? { ...c, name: node.path.join(' > ') } : c
+    })
+  } catch (error) {
+    io.detail(`Category names unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    return candidates
+  }
 }
 
 interface QueryArgs {
