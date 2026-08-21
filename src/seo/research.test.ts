@@ -82,38 +82,31 @@ function listing(): ListingRecord {
   })
 }
 
+/**
+ * Fourteen comparable listings, not the two this started with.
+ *
+ * The count is load-bearing since the relevance floor exists: below
+ * MIN_COMPARABLE a run withholds its candidates. These tests are about *when
+ * the marketplace gets called*, not about whether a two-listing sample may
+ * carry a conclusion — that question belongs to `relevance.test.ts`.
+ */
 function searchAnswer(): SearchResult {
   return {
     query: 'dart holder',
     totalMatches: 1611,
-    listings: [
-      {
-        id: '1',
-        title: 'Dart Holder Wall Mount',
-        tags: ['dart holder'],
-        materials: [],
-        priceEur: 14.9,
-        views: 120,
-        favourites: 2,
-        daysListed: 90,
-        kind: 'physical',
-        categoryId: '1',
-        url: null,
-      },
-      {
-        id: '2',
-        title: 'Dart Holder Stand',
-        tags: ['dart holder'],
-        materials: [],
-        priceEur: 12.5,
-        views: 80,
-        favourites: 1,
-        daysListed: 120,
-        kind: 'physical',
-        categoryId: '1',
-        url: null,
-      },
-    ],
+    listings: Array.from({ length: 14 }, (_, i) => ({
+      id: String(i + 1),
+      title: i % 2 ? 'Dart Holder Stand' : 'Dart Holder Wall Mount',
+      tags: ['dart holder'],
+      materials: [],
+      priceEur: 12.5 + i,
+      views: 80 + i * 5,
+      favourites: 1,
+      daysListed: 90 + i,
+      kind: 'physical' as const,
+      categoryId: '1',
+      url: null,
+    })),
     aspectFacets: [],
   }
 }

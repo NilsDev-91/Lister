@@ -242,7 +242,13 @@ Write from the title, the seller's facts, and the images alone. Do not paraphras
   // different languages against different markets, and the model needs to see
   // which block belongs to which — that is what the heading is for.
   const research = [args.evidence?.ebay, args.evidence?.etsy]
-    .filter((e): e is KeywordEvidence => Boolean(e))
+    // Only evidence that cleared the relevance floor is shown. A run whose
+    // sample turned out to be about something else keeps its counts on the
+    // record, but a heading called KEYWORD RESEARCH above an empty table
+    // invites the model to write as if there were findings. No block at all
+    // is the honest input — and the unevidenced path is the one `create`
+    // takes anyway.
+    .filter((e): e is KeywordEvidence => e !== null && e !== undefined && e.relevance.sufficient)
     .map(formatEvidence)
     .join('\n\n')
 

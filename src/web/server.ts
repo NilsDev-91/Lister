@@ -836,11 +836,26 @@ async function handleListingAction(
       return
     }
 
+    // Research can exist and still carry nothing: a run whose sample turned out
+    // to be about something else keeps its counts and loses its findings. The
+    // draft is still worth writing — that is what `create` does every time —
+    // but saying "Entwurf erstellt" alone would let it pass as evidence-backed.
+    const evidenced = (['ebay', 'etsy'] as const).some((m) => listing.seo?.[m]?.relevance.sufficient)
+
     const io = collectingIo(true)
     // No marketplaces: draft against the research already on the record rather
     // than spending another round of marketplace calls.
     await keywordsCommand({ id, marketplaces: [], rewrite: true, credit: true, io })
-    redirect(res, flashUrl(backTo, 'ok', 'Entwurf erstellt — noch nichts übernommen.'))
+    redirect(
+      res,
+      flashUrl(
+        backTo,
+        evidenced ? 'ok' : 'warn',
+        evidenced
+          ? 'Entwurf erstellt — noch nichts übernommen.'
+          : 'Entwurf erstellt, aber ohne Recherchebelege — die Recherche fand nichts Vergleichbares. Noch nichts übernommen.',
+      ),
+    )
     return
   }
 

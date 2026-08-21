@@ -1,5 +1,6 @@
 import type { ListingRecord, Marketplace } from '../types.js'
 import { normaliseTag, phrasesFromTitle } from './mine.js'
+import { phraseIsAnchored } from './relevance.js'
 
 /**
  * Picks the searches a research run starts from.
@@ -87,10 +88,20 @@ export function seedQueries(args: SeedArgs): string[] {
  * numbers*. `totalMatches` is a property of a query, so a phrase only ever gets
  * a competition figure by being searched. Round two turns the strongest
  * candidates into queries so their scores stop resting on a neutral guess.
+ *
+ * **A follow-up must be anchored to the item, and this is the expensive
+ * lesson.** Round one for a dart holder came back full of halter-neck dress
+ * patterns — "dart" is a sewing term — and round two dutifully searched the
+ * phrases mined out of them: "sewing pattern" and "sleeveless dress". Those
+ * two queries spent real quota to fetch a hundred dresses, which then *were*
+ * the market. A mined phrase is a hypothesis from a sample that may already be
+ * off-topic; requiring it to share a word with the item stops the sample from
+ * writing its own next query.
  */
 export function followUpQueries(
   candidates: { phrase: string; usableAsTag: boolean; competition: number | null }[],
   alreadyQueried: string[],
+  anchors: string[] = [],
   max = 3,
 ): string[] {
   const seen = alreadyQueried.map(normaliseTag)
@@ -103,6 +114,9 @@ export function followUpQueries(
     if (candidate.competition !== null || !candidate.usableAsTag) continue
     if (wordCount(candidate.phrase) < MIN_WORDS) continue
     if (seen.includes(candidate.phrase) || isRedundant(candidate.phrase, out)) continue
+    // The same rule the sample side uses: a phrase that would be refused as a
+    // competitor must not be accepted as a query.
+    if (!phraseIsAnchored(candidate.phrase, anchors)) continue
     out.push(candidate.phrase)
   }
 

@@ -140,6 +140,21 @@ function reportMarketplace(
 ): void {
   if (!evidence) return
 
+  // A withheld run has counts but no findings. Saying so beats printing an
+  // empty table under a confident heading — and "one of 113 hits was
+  // comparable" is itself the answer: this niche is empty in this language.
+  if (!evidence.relevance.sufficient) {
+    const { kept, sampled } = evidence.relevance
+    io.step(`${marketplace} — no usable research`)
+    io.info(
+      sampled === 0
+        ? `  ${evidence.queries.length} search(es) returned no listing at all.`
+        : `  ${kept} of ${sampled} sampled listing(s) sell anything comparable — too thin to recommend anything.`,
+    )
+    for (const note of evidence.notes) io.detail(`  ${note}`)
+    return
+  }
+
   io.step(`${marketplace} — top phrases by opportunity`)
   for (const candidate of evidence.candidates.slice(0, 10)) {
     const competition = candidate.competition === null ? 'unmeasured' : `${candidate.competition.toLocaleString('en-US')} competing`
@@ -181,7 +196,7 @@ function reportCoverage(
   evidence: KeywordEvidence | null,
   io: Io,
 ): void {
-  if (!evidence) return
+  if (!evidence || !evidence.relevance.sufficient) return
 
   const isEtsy = marketplace === 'etsy'
   const title = isEtsy ? listing.copy.etsy.title : listing.copy.ebay.title

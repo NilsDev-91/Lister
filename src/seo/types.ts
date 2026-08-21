@@ -163,6 +163,27 @@ export const KeywordEvidenceSchema = z.object({
   priceBandEur: PriceBandSchema.nullable().default(null),
   aspectFacets: z.array(AspectFacetSchema).default([]),
   /**
+   * How much of what was sampled actually sells something comparable.
+   *
+   * Required, and that is the migration: `ListingRecord.seo` carries
+   * `.catch(null)` for exactly this case, so evidence written before the
+   * relevance filter existed fails validation and degrades to null instead of
+   * being read as if it had been filtered. The records that prompted this
+   * change held a dart holder's "market" mined from linen dresses; letting
+   * them survive the upgrade would keep that conclusion alive. The cost is one
+   * research run.
+   */
+  relevance: z.object({
+    /** The item's own vocabulary, as the filter used it. Reproducible. */
+    anchors: z.array(z.string()),
+    /** Distinct listings the searches returned, before any filtering. */
+    sampled: z.number().int().nonnegative(),
+    /** How many of them survived the digital and relevance filters. */
+    kept: z.number().int().nonnegative(),
+    /** Whether `kept` clears MIN_COMPARABLE — see `relevance.ts`. */
+    sufficient: z.boolean(),
+  }),
+  /**
    * Anything that limited the research: a truncated batch, a quota stop, a
    * marketplace that withheld a field.
    *

@@ -23,6 +23,7 @@ function evidence(candidates: KeywordCandidate[]): KeywordEvidence {
     generatedAt: '2026-08-13T00:00:00.000Z',
     queries: ['x'],
     sampleSize: 10,
+    relevance: { anchors: [], sampled: 10, kept: 10, sufficient: true },
     candidates,
     categoryConsensus: null,
     priceBandEur: null,

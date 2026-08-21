@@ -31,7 +31,7 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Etsy | Client fertig, **noch nie verbunden/getestet** |
 | Etsy öffentliche Suche | fertig, **gegen die echte API verifiziert** (kein OAuth) |
 | eBay Browse (Recherche) | implementiert, **braucht Production-Keyset**, nie live gelaufen |
-| Keyword-Recherche | fertig, **live gegen echte Etsy-Daten gelaufen**; eBay-Hälfte ungeprüft |
+| Keyword-Recherche | fertig, **live gegen echte Etsy-Daten gelaufen**; eBay-Hälfte ungeprüft. Seit 21.08. mit Relevanz-Gate und Belegschwelle (`seo/relevance.ts`): passt die Stichprobe nicht zum Artikel, gibt es **keine** Empfehlung, kein Preisband, keine Kategorie — siehe Nachtrag 21.08. |
 | eBay-Aspect-Engine | fertig, **live gegen die Sandbox-Taxonomy geprüft** (6 → 8 Merkmale) |
 | eBay-Titel-Sanitizer | fertig: Emoji und `?` im Schema, Rest als Preflight-Warnung |
 | Etsy-Eignungs-Gate | fertig, Default-Deny; seit 18.08. mit protokolliertem Per-Listing-Override (`etsyDesignRiskAccepted`, Zeitpunkt+Quelle) — Bildregel bleibt ohne Override: Etsy bekommt nur eigene Fotos |
@@ -65,7 +65,7 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | UI-Feinschliff | fertig: Toast-Overlay statt Kopfbanner, Scroll-Position übersteht Aktions-Klicks, Editor-Guard warnt vor ungespeicherten Feldern — **live verifiziert** |
 | Preis im Editor | fertig (21.08.): Feld „Artikel · Preis (EUR)" im Editorformular, deutsches Dezimalkomma erlaubt, **dritte Nachkommastelle wird abgelehnt statt gerundet**; ein fehlendes Feld lässt den Preis unangetastet. Bis dahin war der Preis nur beim Anlegen setzbar. Live-Inserate übernehmen ihn erst per „Änderungen übertragen" (`updateOffer` schreibt `product` mit) |
 
-507 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
+526 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
 `npm test && npm run build` läuft sauber.
 
 > `db.concurrency.test.ts` „is unsafe without the lock" ist ein
@@ -187,6 +187,84 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-21 — Die Recherche erfand einen Markt: „dart" heißt auch Abnäher
+
+Am Dartshalter stand als gespeicherte Etsy-Recherche: Top-Phrasen `summer
+dress, natural linen dress, midi dress`, Kategorie-Konsens 505 zu 71 %,
+Preisband **Median 59,54 €** aus 56 Inseraten. Daraus speiste sich die
+Preis-Warnung im Preflight („EUR 20.99 is 0.4× the median") — sie verglich
+einen Dartshalter mit Leinenkleidern. Ein `--rewrite` hätte Claude genau diese
+Tabelle als Beleggrundlage vorgelegt.
+
+**Ursache, rekonstruiert aus den Cache-Dateien des Laufs:** „Dart" ist im
+Englischen der Abnäher beim Nähen. Etsys Antwort auf den deutschen Seed
+`dart halter` waren zwölf Inserate, davon **zehn Schnittmuster** („Halter Neck
+Knit Dress", „dart fitted") und zwei echte Wettbewerber. Die anderen Seeds:
+`dartpfeile halter` 0 Treffer, `3d druck dart` 0, `dart zubehör` 1 (dasselbe
+Inserat). Der deutsche Dart-Markt auf Etsy ist praktisch leer — **das ist das
+Ergebnis**, und die Pipeline machte trotzdem eine Auswertung daraus:
+
+1. `mine()` zog aus den Schnittmustern die Phrasen `sewing pattern` und
+   `sleeveless dress`.
+2. **Runde 2 suchte diese Phrasen aktiv nach** — ohne jede Prüfung, ob sie
+   etwas mit dem Artikel zu tun haben — und holte 100 weitere Inserate.
+3. Und dann die Pointe: **Der Digital-Filter entfernte die Schnittmuster
+   (PDFs) und behielt die Kleider.** Übrig blieb das Rauschen, das mit Darts
+   gar nichts zu tun hatte. Eine Schutzmaßnahme, die die falsche Hälfte
+   wegräumte.
+
+Der teure Teil war nicht der Homonym-Treffer, sondern dass die Stichprobe sich
+**ihre eigene nächste Suchanfrage schreiben durfte**. Ein Ausreißer wurde so
+zur Mehrheit.
+
+**Zwei Verteidigungen, und die zweite trägt.** `seo/relevance.ts`:
+
+- **Anker.** Aus dem eigenen Material (Quelltitel und -Tags, beide
+  Marktplatz-Titel, Etsy-Tags, Material) entsteht das Vokabular des Artikels.
+  Ein Treffer zählt nur, wenn er mindestens ein Ankerwort trägt; Anker ab vier
+  Zeichen greifen auch im Kompositum („dart" findet „Dartpfeil-Halter" und
+  „Dartsmount"), kürzere nur als ganzes Wort — sonst fände „pla" das Wort
+  „display". Dieselbe Prüfung entscheidet, welche geminten Phrasen Runde 2
+  überhaupt suchen darf: `sewing pattern` und `sleeveless dress` wären nie
+  gestellt worden.
+- **Belegschwelle (`MIN_COMPARABLE = 12`).** Darunter liefert der Lauf
+  **keine** Kandidaten, **kein** Preisband, **keine** Kategorie, **keine**
+  Facetten — nur die Zählungen und die Notizen. Angewendet an genau einer
+  Stelle (`withholdThinEvidence`, aufgerufen in `research.ts`), damit kein
+  Verbraucher die Prüfung vergessen kann.
+
+**Der Anker-Filter allein hätte nicht gereicht, und das ist der Punkt.** Er
+erkennt Wörter, keine Bedeutung: „vintage sewing pattern / halter top / dart
+fitted" trifft beide Anker und kommt durch. Am echten Lauf bleiben nach beiden
+Filtern 5 von 12 Treffern übrig — zwei echte Wettbewerber und drei
+Schnittmuster. Erst die Schwelle macht daraus die richtige Antwort. Ein
+schärferer Filter würde echte Nischen-Treffer mitreißen, und das ist der
+teurere Fehler. Gleiche Bauform wie die Bildregel, die Dateinamen erkennt und
+keine Bildinhalte.
+
+**Migration ohne Aufräumskript:** `relevance` ist ein **Pflichtfeld** im
+`KeywordEvidenceSchema`. Alte Evidenz fällt damit durch die Validierung, und
+`ListingRecord.seo` trägt `.catch(null)` — genau für diesen Fall dokumentiert.
+Die Kleider-Recherche verschwand beim ersten Lesen von selbst, ohne dass
+jemand `listings.json` anfassen musste. Kostet einen Recherche-Lauf.
+
+**Beides live gegengeprüft** (21.08.):
+
+- Dartshalter, 4 Suchen: „5 von 12 vergleichbar — keine Phrasen, kein
+  Preisband, keine Kategorie." Runde 2 lief gar nicht erst an. Die
+  Preis-Warnung im Preflight ist weg.
+- Benchy, 7 Suchen: 46 vergleichbare Inserate von 165 Treffern, Phrasen
+  `benchy boat`, `3d benchy`, `printed benchy`, Preisband Median 4,09 €.
+  **Der Gate erwürgt keinen echten Markt** — ohne diesen Gegenbeweis wäre
+  „findet nichts" nicht von „filtert alles weg" zu unterscheiden.
+
+Fixtures für die Tests sind die echten Cache-Antworten des Fehl-Laufs
+(`src/seo/__fixtures__/`), inklusive eines Tests, der den **alten** Zustand
+festhält: ohne Anker entstehen aus denselben Daten wieder Kleider-Phrasen und
+ein Preisband. Nebenbei ist `seo/text.ts` entstanden — Tokenisierung und
+Stoppwörter, damit `mine.ts` und `relevance.ts` sich nicht im Kreis
+importieren (derselbe Grund wie bei `marketplace.ts`).
 
 ## Nachtrag 2026-08-19 (2) — Sandbox-Durchlauf im Browser: fünf stille Knöpfe
 

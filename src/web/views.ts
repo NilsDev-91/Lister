@@ -656,6 +656,30 @@ function keywordPanel(listing: ListingRecord): string {
       const evidence = research?.[marketplace]
       if (!evidence) return ''
 
+      const heading = `<h4 style="margin:.9rem 0 .35rem">${
+        marketplace === 'ebay' ? 'eBay · Deutsch' : 'Etsy · Deutsch'
+      }</h4>`
+
+      // A run that found nothing comparable says so in words. The empty table
+      // it used to render read like "no competition", which is the opposite of
+      // what happened — and for eBay it hid the actual reason, which is that
+      // the Browse API has never answered here at all.
+      if (!evidence.relevance.sufficient) {
+        const { kept, sampled } = evidence.relevance
+        const reason =
+          sampled === 0
+            ? `${evidence.queries.length} Suche(n), kein einziger Treffer.`
+            : `${evidence.queries.length} Suchen, ${sampled} Treffer — davon ${kept} vergleichbar mit diesem Artikel.`
+        return `${heading}
+          <p class="note">${esc(reason)} Zu wenig für Empfehlungen: keine Phrasen, kein Preisband,
+            keine Kategorie. Ein leerer Markt ist ein Ergebnis — erfundene Belege wären keins.</p>
+          ${
+            evidence.notes.length
+              ? `<p class="note">Grenzen dieser Recherche: ${esc(evidence.notes.join(' '))}</p>`
+              : ''
+          }`
+      }
+
       const rows = evidence.candidates
         .slice(0, 8)
         .map((c) => {
@@ -686,10 +710,9 @@ function keywordPanel(listing: ListingRecord): string {
       // spatial question, and a marker on a line answers it faster than numbers.
       const price = evidence.priceBandEur ? priceScale(listing.product.priceEur, evidence.priceBandEur) : ''
 
-      return `<h4 style="margin:.9rem 0 .35rem">${marketplace === 'ebay' ? 'eBay · Deutsch' : 'Etsy · Deutsch'}</h4>
-        <p class="note">${evidence.sampleSize} Inserate aus ${evidence.queries.length} Suchen · ${
-          result.used.length
-        } Empfehlung(en) im Text</p>
+      return `${heading}
+        <p class="note">${evidence.sampleSize} vergleichbare Inserate aus ${evidence.queries.length} Suchen
+          (${evidence.relevance.sampled} Treffer insgesamt) · ${result.used.length} Empfehlung(en) im Text</p>
         <table class="kw"><thead><tr><th>Phrase</th><th>Nutzen</th><th>Konkurrenz</th><th>Views/Tag</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4">Keine Kandidaten</td></tr>'}</tbody></table>
         ${price}${missed}${notes}`

@@ -7,6 +7,7 @@ import { searchEtsy } from './etsy-source.js'
 import { searchEbay } from './ebay-source.js'
 import { mine } from './mine.js'
 import { followUpQueries, seedQueries } from './seed.js'
+import { anchorTerms, withholdThinEvidence } from './relevance.js'
 import { cacheKey, readSearchCache, writeSearchCache, TTL_HOURS } from './research-cache.js'
 import type { KeywordEvidence, SearchResult } from './types.js'
 
@@ -52,6 +53,12 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
   const now = args.now ?? new Date()
   const perQuery = args.perQuery ?? 50
   const rounds = args.rounds ?? 2
+
+  // The item's own vocabulary, computed once: it gates which sampled listings
+  // count as competition AND which mined phrases may become round-two queries.
+  // Both defences need the same word list, or the second round would search
+  // for something the first round already refused to count.
+  const anchors = anchorTerms(listing)
 
   const seeds = seedQueries({ listing, marketplace })
   if (!seeds.length) {
@@ -99,12 +106,13 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
     marketplace,
     language,
     results,
+    anchors,
     generatedAt: now.toISOString(),
     notes,
   })
 
   if (rounds >= 2) {
-    const followUps = followUpQueries(evidence.candidates, seeds)
+    const followUps = followUpQueries(evidence.candidates, seeds, anchors)
     if (followUps.length) {
       io.step(`Measuring competition for ${followUps.length} candidate phrase(s)`)
       for (const query of followUps) {
@@ -121,6 +129,7 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
         marketplace,
         language,
         results,
+        anchors,
         generatedAt: now.toISOString(),
         notes,
       })
@@ -151,11 +160,24 @@ export async function researchKeywords(args: ResearchArgs): Promise<KeywordEvide
 
   reportQuota(marketplace, io)
 
-  const measured = evidence.candidates.filter((c) => c.competition !== null).length
-  io.ok(
-    `${evidence.candidates.length} candidates from ${evidence.sampleSize} listings ` +
-      `(${measured} with a measured competition figure).`,
-  )
+  // The last step before this leaves the module, and the only place it
+  // happens: a sample too thin to mean anything keeps its counts and loses its
+  // conclusions. Downstream then needs no new checks — a withheld run looks
+  // exactly like a run that found no candidates, which is what it is.
+  evidence = withholdThinEvidence(evidence)
+
+  if (evidence.relevance.sufficient) {
+    const measured = evidence.candidates.filter((c) => c.competition !== null).length
+    io.ok(
+      `${evidence.candidates.length} candidates from ${evidence.sampleSize} listings ` +
+        `(${measured} with a measured competition figure).`,
+    )
+  } else {
+    io.warn(
+      `Nothing usable: ${evidence.relevance.kept} of ${evidence.relevance.sampled} sampled listing(s) ` +
+        `are comparable to this item — no phrases, no price band, no category.`,
+    )
+  }
   for (const note of evidence.notes) io.detail(note)
 
   return evidence

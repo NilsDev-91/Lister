@@ -1,5 +1,7 @@
 import type { Marketplace } from '../types.js'
 import { EtsyTagSchema } from '../types.js'
+import { isComparable, MIN_COMPARABLE } from './relevance.js'
+import { normaliseTag, phrasesFromTitle } from './text.js'
 import type {
   CompetitorListing,
   KeywordCandidate,
@@ -7,6 +9,10 @@ import type {
   KeywordSource,
   SearchResult,
 } from './types.js'
+// Re-exported, not moved out of reach: the miner stays the address for phrase
+// handling; `text.js` exists to break an import cycle, not to become a second
+// module every caller has to know about.
+export { normaliseTag, phrasesFromTitle } from './text.js'
 
 /**
  * Turns competitor listings into ranked keyword candidates.
@@ -20,89 +26,6 @@ import type {
 // ---------------------------------------------------------------------------
 // Tokenising
 // ---------------------------------------------------------------------------
-
-/**
- * Words that carry no search intent on their own.
- *
- * Both languages live in one set because a title sample is not reliably
- * monolingual — Etsy sellers in Germany write English titles with German words
- * left in, and vice versa.
- */
-const STOPWORDS = new Set([
-  // German
-  'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'eines', 'und', 'oder',
-  'aber', 'mit', 'für', 'von', 'zu', 'zum', 'zur', 'im', 'in', 'am', 'an', 'auf', 'aus', 'bei',
-  'beim', 'vom', 'nach', 'über', 'unter', 'vor', 'zwischen', 'ist', 'sind', 'war', 'waren', 'wird',
-  'werden', 'kann', 'können', 'als', 'wie', 'auch', 'nur', 'noch', 'schon', 'sehr', 'sich', 'es',
-  'ins', 'durch', 'ohne', 'gegen', 'um', 'bis', 'seit', 'dass', 'wenn', 'weil', 'man', 'inkl',
-  // English
-  'the', 'a', 'an', 'and', 'or', 'but', 'with', 'for', 'of', 'to', 'in', 'on', 'at', 'from', 'by',
-  'as', 'is', 'are', 'was', 'were', 'be', 'been', 'will', 'can', 'could', 'this', 'that', 'these',
-  'those', 'it', 'its', 'your', 'you', 'we', 'our', 'they', 'their', 'my', 'me', 'not', 'no', 'so',
-  'if', 'then', 'than', 'there', 'here', 'about', 'into', 'over', 'under', 'out', 'up', 'down',
-  'more', 'most', 'very', 'just', 'also', 'only', 'per',
-])
-
-/**
- * Marketplace titles are lists, not sentences: sellers separate keyword groups
- * with pipes, slashes, commas and dashes. Splitting on those first stops an
- * n-gram from spanning a boundary and inventing a phrase nobody wrote —
- * "organizer 3d" out of "Desk Organizer | 3D Printed".
- */
-const SEGMENT_BREAK = /[|/,;:•·–—()[\]{}!?"“”„]+|\s-\s|\s+&\s+/u
-
-/** Keeps letters (incl. umlauts), digits, and word-internal hyphen/apostrophe. */
-const TOKEN = /[\p{L}\p{Nd}]+(?:['’-][\p{L}\p{Nd}]+)*/gu
-
-function tokenise(segment: string): string[] {
-  return (segment.toLowerCase().match(TOKEN) ?? []).filter(
-    // "3d" and "4k" are two characters and load-bearing; "st" and "cm" are not.
-    // Two-letter STOPWORDS survive on purpose: dropping "to" before the n-grams
-    // are built would fuse "made to order" into the phantom "made order" — the
-    // edge-refusal below is where stopwords are handled, not here.
-    (t) => t.length >= 3 || /\d/.test(t) || STOPWORDS.has(t),
-  )
-}
-
-const MAX_NGRAM = 3
-
-/**
- * Every 1..3-word phrase in a title, minus the ones that only look like
- * phrases.
- *
- * Stopwords are dropped at the *edges* rather than removed up front: strip
- * "for" out of "gift for mom" beforehand and you mine "gift mom", which nobody
- * searches for. Keeping them inside and refusing them at the ends preserves the
- * real phrase and discards the fragments around it.
- */
-export function phrasesFromTitle(title: string): string[] {
-  const out: string[] = []
-  for (const segment of title.split(SEGMENT_BREAK)) {
-    const tokens = tokenise(segment)
-    for (let n = 1; n <= MAX_NGRAM; n++) {
-      for (let i = 0; i + n <= tokens.length; i++) {
-        const gram = tokens.slice(i, i + n)
-        if (STOPWORDS.has(gram[0]!) || STOPWORDS.has(gram[n - 1]!)) continue
-        // Any bare number, not just an all-number phrase. Digits in marketplace
-        // titles are sizes, quantities and set counts — "12 cm", "set of 3" —
-        // and the fragments they produce ("personalised 9") read like phrases
-        // while matching nothing. Losing the occasional real one, such as the
-        // darts term "9 dart finish", is the cheaper mistake.
-        if (gram.some((t) => /^\d+$/.test(t))) continue
-        out.push(gram.join(' '))
-      }
-    }
-  }
-  return out
-}
-
-/**
- * Tags are already phrases; they only need normalising to match title n-grams.
- * `tokenise` drops punctuation on its own, so no separator pass is needed.
- */
-export function normaliseTag(tag: string): string {
-  return tokenise(tag).join(' ')
-}
 
 // ---------------------------------------------------------------------------
 // Scoring
@@ -267,6 +190,14 @@ export interface MineArgs {
   results: SearchResult[]
   generatedAt: string
   maxCandidates?: number
+  /**
+   * The item's own vocabulary, from `relevance.ts`.
+   *
+   * Omitted, nothing is filtered — mining a sample is a separate question from
+   * whether the sample belongs to the item, and the tests for the former say
+   * nothing about the latter.
+   */
+  anchors?: string[]
   /** Carried through to the evidence so limits stay visible to the user. */
   notes?: string[]
 }
@@ -312,8 +243,19 @@ export function mine(args: MineArgs): KeywordEvidence {
   // keywords ("stl bundle", "digital download") are ones this seller must not
   // use. Leaving them in produced a "market" spanning EUR 0.56 to EUR 744.94.
   const deduped = [...unique.values()]
-  const sample = deduped.filter((l) => l.kind !== 'digital')
-  const droppedDigital = deduped.length - sample.length
+  const physical = deduped.filter((l) => l.kind !== 'digital')
+  const droppedDigital = deduped.length - physical.length
+
+  // The same move as the digital filter, one step further out: a listing that
+  // sells something else entirely is not competition either. This one is not
+  // hypothetical — an Etsy search for the German seed "dart halter" answered
+  // with halter-neck dress patterns, because "dart" is the English sewing term
+  // for a fitted seam. Note the order: the digital filter had already removed
+  // the sewing patterns (PDFs) and *kept* the dresses, so the surviving noise
+  // was the noise with nothing at all to do with darts.
+  const anchors = args.anchors ?? []
+  const sample = anchors.length ? physical.filter((l) => isComparable(l, anchors)) : physical
+  const droppedOffTopic = physical.length - sample.length
 
   interface Bucket {
     rankers: Set<string>
@@ -393,6 +335,12 @@ export function mine(args: MineArgs): KeywordEvidence {
       `Excluded ${droppedDigital} digital download listing(s) of ${deduped.length} — they sell files, not printed objects.`,
     )
   }
+  if (droppedOffTopic) {
+    notes.push(
+      `Excluded ${droppedOffTopic} listing(s) of ${physical.length} sharing no word with this item — ` +
+        'a search term can mean something else entirely in the market it is searched in.',
+    )
+  }
   const limit = args.maxCandidates ?? 60
   if (candidates.length > limit) {
     notes.push(`${candidates.length} candidates found; keeping the top ${limit} by score.`)
@@ -407,6 +355,12 @@ export function mine(args: MineArgs): KeywordEvidence {
     generatedAt: args.generatedAt,
     queries: results.map((r) => r.query),
     sampleSize,
+    relevance: {
+      anchors,
+      sampled: deduped.length,
+      kept: sampleSize,
+      sufficient: sampleSize >= MIN_COMPARABLE,
+    },
     candidates: candidates.slice(0, limit),
     categoryConsensus: modeWithShare(categories),
     // Four is the fewest that can produce quartiles meaning anything at all.
