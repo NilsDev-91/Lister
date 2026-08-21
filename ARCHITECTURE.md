@@ -63,8 +63,9 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Web-UI-Sitzung | fertig: Token überlebt den Serverneustart (`~/.3d-print-lister/session-token`, 0600, formgeprüft), `localhost`/`[::1]`-GETs werden per 301 auf 127.0.0.1 kanonisiert — beides **im Browser live verifiziert** |
 | Sicherheitsabfragen (UI) | fertig: eigener Modal-Dialog statt `window.confirm` (das in der eingebetteten Ansicht still `false` liefert), Fokus auf „Abbrechen"; Publish/Revise zeigen Busy-Text — **live verifiziert** |
 | UI-Feinschliff | fertig: Toast-Overlay statt Kopfbanner, Scroll-Position übersteht Aktions-Klicks, Editor-Guard warnt vor ungespeicherten Feldern — **live verifiziert** |
+| Preis im Editor | fertig (21.08.): Feld „Artikel · Preis (EUR)" im Editorformular, deutsches Dezimalkomma erlaubt, **dritte Nachkommastelle wird abgelehnt statt gerundet**; ein fehlendes Feld lässt den Preis unangetastet. Bis dahin war der Preis nur beim Anlegen setzbar. Live-Inserate übernehmen ihn erst per „Änderungen übertragen" (`updateOffer` schreibt `product` mit) |
 
-503 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
+507 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
 `npm test && npm run build` läuft sauber.
 
 > `db.concurrency.test.ts` „is unsafe without the lock" ist ein
@@ -321,7 +322,17 @@ kommen ausschließlich aus dem URL-Fetch der Modellseite (durch Lizenz-Gate
 bzw. Rechte- und Bilder-Behauptung freigeschaltet) oder als eigene Fotos.
 Der Parser notiert von den Auxiliaries nur die Dateinamen
 (`auxiliaryPictures`), extrahiert wird nichts; die namensbasierte Bildregel
-bleibt die dokumentierte Grenze. Fixtures sind die zwei echten Exporte,
+bleibt die dokumentierte Grenze.
+
+**Nachtrag 21.08.:** Die Karte zeigt an den Feldern keine „✓ aus 3MF
+übernommen"-Marken mehr (Nutzer-Entscheid). Sechsmal dieselbe Aussage neben
+sechs Feldern machte die Beschriftungen ungleich hoch, und die Quelle steht
+ohnehin als Zeile über den Feldern. **Protokolliert wird unverändert**:
+`printApplied` hält je Feld 3MF oder MANUAL samt Dateihash — die Anzeige wurde
+ruhiger, die Beweiskette nicht kürzer. Die Felder stehen jetzt drei und drei
+(Länge/Breite/Höhe, dann Gewicht/Material/Farbe), weil die Maße
+zusammengehören und „Höhe" sonst je nach Fensterbreite allein in die nächste
+Zeile rutschte. Fixtures sind die zwei echten Exporte,
 getrimmt (G-Code auf Header, Bilder als Namens-Stubs); `testdata/` ist
 gitignored.
 

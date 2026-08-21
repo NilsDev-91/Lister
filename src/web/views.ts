@@ -1073,6 +1073,9 @@ export function listingDetail({
            beides erledigt sich, wenn du hier Fotos ablegst und dann „Zu eBay hochladen" drückst.</p>`
 
   const publishBlocked = blockers.length > 0
+  // A price change is free while nothing is live and a real change to a running
+  // listing once something is — the note next to the field says which.
+  const anyLive = listing.marketplaces.some((row) => row.liveId !== null)
 
   return page({
     title: listing.source.title,
@@ -1085,6 +1088,22 @@ export function listingDetail({
       <div>
         ${proposalPanel(listing)}
         <form method="post" action="/listing/${esc(listing.id)}" data-guard>
+          <div class="card">
+            <h3>Artikel</h3>
+            <label for="price">Preis (EUR)</label>
+            <input class="field" id="price" name="price" inputmode="decimal" style="max-width:9rem"
+                   value="${esc(listing.product.priceEur.toFixed(2))}">
+            <p class="note">Gilt für beide Marktplätze.${
+              listing.variants?.length
+                ? ' Solange Farbvarianten stehen, verkauft eBay zu den Preisen der Variantenzeilen — dieser hier bleibt der Preis für Etsy und für ein Inserat ohne Varianten.'
+                : ''
+            }${
+              anyLive
+                ? ' Das laufende Inserat übernimmt den neuen Preis erst mit „Änderungen übertragen".'
+                : ''
+            }</p>
+          </div>
+
           <div class="card">
             <h3>eBay · Deutsch</h3>
             <label for="ebayTitle">Titel <span class="counter" id="c-ebay"></span></label>
@@ -1210,9 +1229,12 @@ export function listingDetail({
  *
  * Attach and apply are two steps on purpose: the parse result is evidence and
  * gets shown editable before any of it becomes listing content. Every field
- * carries its provenance; a value the seller edits before applying is
- * recorded as MANUAL, and a re-upload only refreshes this card — applied
- * values live in the product fields and survive it untouched.
+ * carries its provenance in the store (`printApplied`: 3MF or MANUAL, with the
+ * file hash) — a value the seller edits before applying is recorded as MANUAL.
+ * The card itself names the source once, in the header line above the fields,
+ * and leaves the fields unmarked: a per-field badge repeated the same fact six
+ * times and made the labels ragged. A re-upload only refreshes this card;
+ * applied values live in the product fields and survive it untouched.
  */
 function printDataCard(listing: ListingRecord): string {
   const uploads = listing.printUploads
@@ -1265,14 +1287,6 @@ function printDataCard(listing: ListingRecord): string {
         ? banner({ kind: 'warn', text: 'Maße unvollständig gelesen — bitte prüfen und ergänzen.' })
         : ''
 
-  const badge = (field: string): string => {
-    const applied = listing.printApplied[field]
-    if (!applied || applied.fileSha256 !== latest.fileSha256) return ''
-    return applied.source === '3MF'
-      ? ' <span class="note">✓ aus 3MF übernommen</span>'
-      : ' <span class="note">✓ übernommen (manuell angepasst)</span>'
-  }
-
   const older = uploads.slice(0, -1).reverse()
   const history = older.length
     ? `<details style="margin-top:.6rem"><summary class="note">Frühere Versionen (${older.length})</summary>
@@ -1300,20 +1314,20 @@ function printDataCard(listing: ListingRecord): string {
     <form method="post" action="/listing/${esc(listing.id)}/printdata/apply">
       <input type="hidden" name="sha" value="${esc(latest.fileSha256)}">
       <div class="row">
-        <div><label for="pdLength">Länge (mm)${badge('dimensionsMm')}</label>
+        <div><label for="pdLength">Länge (mm)</label>
              <input class="field" id="pdLength" name="pdLength" value="${esc(val(proposed.lengthMm))}"></div>
         <div><label for="pdWidth">Breite (mm)</label>
              <input class="field" id="pdWidth" name="pdWidth" value="${esc(val(proposed.widthMm))}"></div>
         <div><label for="pdHeight">Höhe (mm)</label>
              <input class="field" id="pdHeight" name="pdHeight" value="${esc(val(proposed.heightMm))}"></div>
-        <div><label for="pdWeight">Gewicht (g)${badge('weightGrams')}</label>
-             <input class="field" id="pdWeight" name="pdWeight" value="${esc(val(proposed.weightGrams))}"></div>
       </div>
       <div class="gap"></div>
       <div class="row">
-        <div><label for="pdMaterial">Material${badge('material')}</label>
+        <div><label for="pdWeight">Gewicht (g)</label>
+             <input class="field" id="pdWeight" name="pdWeight" value="${esc(val(proposed.weightGrams))}"></div>
+        <div><label for="pdMaterial">Material</label>
              <input class="field" id="pdMaterial" name="pdMaterial" value="${esc(proposed.material ?? '')}"></div>
-        <div><label for="pdColours">Farbe(n), Komma-getrennt${badge('colour')}</label>
+        <div><label for="pdColours">Farbe(n), Komma-getrennt</label>
              <input class="field" id="pdColours" name="pdColours" value="${esc(proposed.colours.join(', '))}"></div>
       </div>
       <div class="actions">

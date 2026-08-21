@@ -13,7 +13,14 @@ import { gate } from '../sources/license.js'
 import { attachPrintData, applyPrintData } from '../commands/printdata.js'
 import * as ebayAuth from '../marketplaces/ebay/auth.js'
 import { getAspectSpecs } from '../marketplaces/ebay/client.js'
-import { EbayCopySchema, EbaySkuSchema, EtsyCopySchema, type ListingRecord, type Marketplace } from '../types.js'
+import {
+  EbayCopySchema,
+  EbaySkuSchema,
+  EtsyCopySchema,
+  ProductInputSchema,
+  type ListingRecord,
+  type Marketplace,
+} from '../types.js'
 import { auditContent, auditEbayAspects, Report } from '../commands/preflight.js'
 import { createCommand } from '../commands/create.js'
 import { publishCommand } from '../commands/publish.js'
@@ -533,12 +540,26 @@ async function handleListingAction(
     const sku = skuRaw ? EbaySkuSchema.safeParse(skuRaw) : null
     const parsedVariants = parseVariants(fields['ebayVariants'] ?? '')
 
+    // The price rides on the same form. Two rules, both about money: a German
+    // decimal comma is normal input and must not become a rejected price, and
+    // a third decimal is refused rather than rounded — `toFixed(2)` at the
+    // marketplace would silently charge a price the seller never typed. An
+    // absent field means "unchanged": a form from before this input existed
+    // must not reset the price to anything.
+    const priceRaw = (fields['price'] ?? '').trim()
+    const priceValue = ProductInputSchema.shape.priceEur.safeParse(Number(priceRaw.replace(',', '.')))
+    const priceError =
+      !priceRaw || (/^\d{1,7}([.,]\d{1,2})?$/.test(priceRaw) && priceValue.success)
+        ? null
+        : `Preis: „${priceRaw}" ist kein gültiger Preis — Euro, größer als 0, höchstens zwei Nachkommastellen.`
+
     // Validate with the same schemas the CLI uses, so the UI cannot smuggle in
     // copy that a marketplace would reject.
     if (
       !ebay.success ||
       !etsy.success ||
       (sku && !sku.success) ||
+      priceError ||
       parsedVariants.errors.length ||
       parsedAspects.errors.length
     ) {
@@ -546,6 +567,7 @@ async function handleListingAction(
         ...(ebay.success ? [] : ebay.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)),
         ...(etsy.success ? [] : etsy.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)),
         ...(sku && !sku.success ? sku.error.issues.map((i) => `SKU: ${i.message}`) : []),
+        ...(priceError ? [priceError] : []),
         ...parsedVariants.errors.map((e) => `Varianten: ${e}`),
         ...parsedAspects.errors.map((e) => `Merkmale: ${e}`),
       ].join(' · ')
@@ -568,6 +590,7 @@ async function handleListingAction(
     upsert({
       ...current,
       copy: { ebay: ebay.data, etsy: etsy.data },
+      product: priceRaw && priceValue.success ? { ...current.product, priceEur: priceValue.data } : current.product,
       sku: sku ? sku.data : null,
       variants,
     })
