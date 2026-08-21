@@ -1,7 +1,8 @@
 # 3d-print-lister — Architektur & Übergabe
 
-> Stand: 2026-08-17, nach der Optimierungs-Sitzung (Recherche-Cache, ToS-Prüfung,
-> Review-Fixes, **Git-Repo initialisiert** — Historie ab Baseline `5013a0c`).
+> Stand: 2026-08-19, nach dem Sandbox-Durchlauf im Browser (fünf stille Knöpfe
+> gefunden und gefixt; davor am selben Tag der 3MF-Druckdaten-Pfad). Git-Repo
+> seit 17.08. — Historie ab Baseline `5013a0c`.
 > Diese Datei
 > ist für eine **frische Sitzung ohne Vorwissen** geschrieben. Sie enthält vor
 > allem die Erkenntnisse, die teuer waren — Dinge, die in keiner Dokumentation
@@ -59,8 +60,11 @@ Nutzer: Einzelverkäufer in Deutschland, druckt selbst, verkauft auf `ebay.de`.
 | Printables-Adapter | fertig: Endpunkt öffentlich, Introspection deaktiviert — Felder per Fehler-Probing **live verifiziert** (inkl. Lizenzkatalog, 22 Einträge), Smoke-Test gelaufen |
 | Formular-E2E neue Quellen | **beide live durchgespielt**: Cults3D → Entwurf `c3d-flexi-turtle-9770ca`, Printables → `prn-3161-c96d60`, jeweils ohne Datei, mit Texten, Merkmalen, Referenzbildern und laufendem Preflight. (Cults3D-Lauf fiel in einen Opus-Ausfall und lief über `LISTER_MODEL=claude-sonnet-5` — gleicher Codepfad; Printables danach mit dem Opus-Default.) |
 | Druckdaten aus 3MF | fertig: Parser gegen zwei echte Bambu-Exporte verifiziert, Upload-Karte + Apply mit Herkunfts-Audit **im Browser live durchgespielt** (inkl. MANUAL-Override und Designer-Mismatch-Warnung). Aus der 3MF werden **nie** Bilder übernommen (Nutzer-Entscheid; pHash-Index gestrichen — war Vorlagen-Boilerplate) |
+| Web-UI-Sitzung | fertig: Token überlebt den Serverneustart (`~/.3d-print-lister/session-token`, 0600, formgeprüft), `localhost`/`[::1]`-GETs werden per 301 auf 127.0.0.1 kanonisiert — beides **im Browser live verifiziert** |
+| Sicherheitsabfragen (UI) | fertig: eigener Modal-Dialog statt `window.confirm` (das in der eingebetteten Ansicht still `false` liefert), Fokus auf „Abbrechen"; Publish/Revise zeigen Busy-Text — **live verifiziert** |
+| UI-Feinschliff | fertig: Toast-Overlay statt Kopfbanner, Scroll-Position übersteht Aktions-Klicks, Editor-Guard warnt vor ungespeicherten Feldern — **live verifiziert** |
 
-425 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
+503 Tests, alle grün (inkl. Hook-Tests unter `scripts/hooks/`).
 `npm test && npm run build` läuft sauber.
 
 > `db.concurrency.test.ts` „is unsafe without the lock" ist ein
@@ -182,6 +186,81 @@ und Fortschritt, Default ist das Terminal, die UI reicht ein sammelndes durch.
 ---
 
 # Erkenntnisse, die Zeit gekostet haben
+
+## Nachtrag 2026-08-19 (2) — Sandbox-Durchlauf im Browser: fünf stille Knöpfe
+
+Ein manueller Durchlauf durch die UI, nichts Neues gebaut. Ergebnis: fünf
+Knöpfe, die nichts taten oder Daten fraßen — und vier davon zeigten **dasselbe
+Bild bei verschiedenen Ursachen**: Der Klick kommt an, jede Seite rendert
+normal, und nichts sagt, warum nichts passiert. Von außen nicht von einem
+kaputten Knopf zu unterscheiden.
+
+**1. Das Sitzungs-Token wurde bei jedem Serverstart neu gewürfelt.** Der offene
+Tab behielt sein altes Cookie; Seiten rendern weiter, der nächste Knopf
+antwortet 403. Es traf ausgerechnet „Live schalten" — das Serverlog sagte
+zweimal „blockierte Anfrage — Session token does not match", die Oberfläche
+sagte nichts. Das Token wird jetzt einmal erzeugt und in
+`DATA_DIR/session-token` abgelegt (0600, im selben 0700-Verzeichnis wie die
+OAuth-Tokens), beim Start gelesen und **auf seine Form geprüft**: eine
+truncierte oder handgeschriebene Datei prägt ein neues Token, statt das Gate zu
+schwächen. Löschen rotiert es. Die Gates bleiben unverändert scharf
+(127.0.0.1-Bindung, Origin-Prüfung, `SameSite=Strict`). Der 403 erklärt sich
+jetzt selbst: Bei abgelaufener Sitzung nennt die Fehlerseite den Grund und den
+Weg zurück (Terminal-URL mit `?token=…` erneut öffnen). Der Test bootet zwei
+Server nacheinander auf demselben Datenverzeichnis und hält fest, dass beide
+dasselbe Token ausgeben.
+
+**2. `window.confirm()` ist in der eingebetteten Browser-Ansicht nicht
+verlässlich** — es liefert nach zwei Millisekunden `false`, ohne je einen Dialog
+zu zeigen. Jeder mit `data-confirm` bewachte Knopf war dort ein stiller No-op,
+also „Live schalten" **und** „Diese Bilder übernehmen". „Keine Antwort" als Nein
+zu werten ist die sichere Richtung, aber eine Frage, die niemand beantworten
+kann, ist ein kaputter Knopf. Die Frage stellt jetzt die Seite selbst: kleiner
+Modal-Dialog mit demselben Text, Fokus auf „Abbrechen" (ein verirrtes Enter darf
+weder Geld auslösen noch fremde Fotos hochladen), Escape und Klick daneben
+brechen ab. Bestätigt wird per `requestSubmit`, damit Busy-Anzeige und
+Scroll-Merken weiter greifen; ein Flag verhindert die Endlosschleife. Der Guard
+selbst ist unverändert: ohne ausdrückliches Fortfahren wird nichts gesendet.
+Dazu trägt das Formular jetzt `data-busy` — der Publish läuft synchron im
+Request und dauert Sekunden, der Knopf sagt so lange „Wird veröffentlicht…".
+
+**3. Das Sitzungs-Cookie ist host-gebunden — das zweite Gesicht der
+Origin-Lektion.** Die Origin-Prüfung akzeptiert `localhost` längst (siehe
+Web-UI), aber das Cookie liegt auf 127.0.0.1: Ein Tab, der auf `localhost`
+gerät, rendert jede Seite und scheitert an jedem Knopf mit „No session cookie".
+GET/HEAD mit Host `localhost` oder `[::1]` werden jetzt per 301 auf
+`http://127.0.0.1:<port>` kanonisiert — inklusive Query und **vor** dem
+Token-Bootstrap, damit auch die geöffnete Token-URL konvergiert. POSTs von
+`localhost` bleiben 403: Ein 301 machte aus dem POST ein GET, ein 307 würde den
+Body cross-origin wiederholen — und nach der GET-Kanonisierung entstehen solche
+POSTs ohnehin nicht mehr, weil jedes Formular auf einer kanonischen Seite liegt.
+
+**4. Ungespeicherte Editorfelder verschwanden wortlos.** SKU ins Feld getippt,
+dann „Werte übernehmen" auf der Druckdaten-Karte gedrückt — die SKU war weg.
+Kein Store-Bug (`applyPrintData` fasst `sku` nie an; ein Test pinnt das jetzt),
+sondern der klassische Mehr-Formulare-Datenfresser: Die Seite trägt neben dem
+Editor ein Dutzend kleiner Formulare (Druckdaten, Titel, Bilder, Rechte), und
+der Browser sendet nur das Formular des gedrückten Knopfs. `input`/`change` am
+Editor setzen jetzt ein Dirty-Flag, `beforeunload` warnt dann nativ; das
+Absenden des Editors löscht das Flag, ein normales Speichern warnt also nie.
+
+**5. Statusmeldungen rissen die Ansicht nach oben.** Jeder Aktionsknopf postet
+und lädt neu, und das Flash-Banner saß am Dokumentanfang — ein „Bild entfernt."
+drei Bildschirme weiter unten sprang zurück an den Seitenanfang. Die Meldung
+schwebt jetzt als fixiertes Overlay: `ok` verschwindet nach 2 s, `warn` nach
+6 s, `bad` bleibt bis zum Klick (ein ungelesener Fehler wiederholt sich nur),
+Klick schließt immer sofort. Dazu merkt sich ein kleines Script beim Absenden
+die Scroll-Position und stellt sie nach dem Reload wieder her — **nur auf
+demselben Pfad**, ein fremder bekäme sonst einen sinnlosen Offset. Inline-Banner
+(Formularfehler im Inhalt, Review-Hinweise) bleiben Banner. Bekannte Restgrenze:
+Das Laden frischer, ungecachter Bilder kann die Position per Scroll-Anchoring
+noch verschieben — Folge des Layouts, nicht des Scripts.
+
+**Verallgemeinerbar:** Kein einziger dieser fünf Funde wäre in einem Unit-Test
+aufgetaucht — dieselbe Regel wie beim `referrer-policy`-Fund. Und weil drei
+verschiedene Ursachen dasselbe Bild erzeugten („Seiten gehen, Knöpfe tot"),
+kostet jede Diagnose Zeit, solange die Oberfläche schweigt. Deshalb nennt der
+403 jetzt seinen Grund, und deshalb ist der Busy-Text kein Kosmetikpunkt.
 
 ## Nachtrag 2026-08-19 — Druckdaten aus geslicten 3MFs (Messwerte statt Schätzung)
 
@@ -1257,10 +1336,19 @@ Vanilla-JS, kein Bundler, kein Framework, keine neue Abhängigkeit.
 auslösen. „Nur localhost" ist keine Grenze: Jede besuchte Webseite kann an
 `127.0.0.1:4321` posten. Deshalb Bindung nur an 127.0.0.1, Origin-Prüfung auf
 jedem POST **und** ein Sitzungs-Token (Cookie, `SameSite=Strict`). Beide Wege
-sind live gegengeprüft, beide antworten mit 403. 14 Tests decken das ab.
+sind live gegengeprüft, beide antworten mit 403. 25 Tests decken das ab.
+
+**Das Token überlebt den Serverneustart** (`~/.3d-print-lister/session-token`,
+0600) — solange es das nicht tat, war jeder offene Tab nach einem Neustart eine
+403-Falle mit stillen Knöpfen. Details im Nachtrag 19.08. (2), Punkt 1.
 
 Preflight-Blocker gelten auch serverseitig — der Knopf ist gesperrt, *und* die
 Route lehnt einen wiederholten Formular-POST ab.
+
+Geld- und Bildübernahme-Knöpfe fragen vorher — mit einem **eigenen**
+Modal-Dialog, nicht mit `window.confirm()`: In der eingebetteten Browser-Ansicht
+liefert `confirm()` sofort `false`, ohne etwas anzuzeigen, und macht jeden
+bewachten Knopf zum stillen No-op (Nachtrag 19.08. (2), Punkt 2).
 
 **`localhost` und `127.0.0.1` sind dieselbe Maschine, aber nicht dieselbe
 Origin.** Wer die UI unter `localhost:4321` öffnet, bekam jede Seite normal
@@ -1269,6 +1357,12 @@ gegen `127.0.0.1:<port>`. Beide Schreibweisen plus `[::1]` werden jetzt
 akzeptiert, **bei identischem Port**. Das lockert nichts: Eine feindliche Domain,
 die auf 127.0.0.1 auflöst, sendet ihren eigenen Namen als Origin und fliegt
 weiterhin raus, und das Sitzungs-Token ist ohnehin die eigentliche Sperre.
+
+**Die Origin-Prüfung war aber nur die halbe Miete: Das Sitzungs-Cookie ist
+host-gebunden** und liegt auf 127.0.0.1 — ein `localhost`-Tab rendert weiter
+jede Seite und scheitert an jedem Knopf, jetzt mit „No session cookie" statt
+mit der Origin-Meldung. `localhost`- und `[::1]`-GETs werden deshalb per 301
+auf 127.0.0.1 kanonisiert; siehe Nachtrag 19.08. (2), Punkt 3.
 
 **`Referrer-Policy: no-referrer` zerstört die Origin-Prüfung.** Der Header hieß
 lange `referrerpolicy` — das ist die Schreibweise des HTML-*Attributs* und als
